@@ -1,0 +1,220 @@
+{
+  "name": "api_retry_step",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/api_retry_step",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Extract",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "job_id",
+              "value": "={{$json.body.job_id || $json.job_id || ''}}"
+            },
+            {
+              "name": "agent_secret",
+              "value": "={{$json.headers['x-agent-secret'] || ''}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Auth",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        600,
+        -120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Task Start",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_tasks (job_id,task_type,task_key,status,input_payload) SELECT NULLIF('{{$json.job_id}}','')::uuid,'workflow','api_retry_step','running','{{ JSON.stringify($json.body || $json) }}'::jsonb WHERE NULLIF('{{$json.job_id}}','') IS NOT NULL ON CONFLICT (job_id,task_key) DO UPDATE SET status='running',updated_at=now();"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Do Work",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        820,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT 1;"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Log Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_events (job_id,event_type,message,metadata) SELECT NULLIF('{{$json.job_id || $json.body.job_id || }}','')::uuid,'workflow_completed','api_retry_step complete',jsonb_build_object('workflow','api_retry_step');"
+      }
+    },
+    {
+      "id": "8",
+      "name": "200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"workflow\":\"api_retry_step\",\"job_id\":\"{{$json.job_id || $json.body.job_id || ''}}\"}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract": {
+      "main": [
+        [
+          {
+            "node": "Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth": {
+      "main": [
+        [
+          {
+            "node": "Task Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Start": {
+      "main": [
+        [
+          {
+            "node": "Do Work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Do Work": {
+      "main": [
+        [
+          {
+            "node": "Log Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Event": {
+      "main": [
+        [
+          {
+            "node": "200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-impl"
+}

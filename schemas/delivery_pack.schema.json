@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["job_id","included_outputs","open_risks","human_review_checklist"],"properties":{"job_id":{"type":"string"},"included_outputs":{"type":"array","items":{"type":"string"}},"open_risks":{"type":"array","items":{"type":"string"}},"human_review_checklist":{"type":"array","items":{"type":"string"}}}}

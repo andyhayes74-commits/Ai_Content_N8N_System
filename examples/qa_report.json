@@ -1,0 +1,1 @@
+{"job_id":"job_demo_001","overall_status":"review_required","checks":[{"name":"factual_grounding","status":"pass","notes":"All factual claims source-linked."},{"name":"risk_review","status":"warning","notes":"One motivation claim needs human legal review."}],"required_revisions":["remove implied guarantee language"]}
