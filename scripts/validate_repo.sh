@@ -38,11 +38,11 @@ import re, sys
 from pathlib import Path
 bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
 fail=[]
-for root in ['workflows','scripts','docs']:
-    for p in Path(root).rglob('*'):
-        if p.is_file():
-            text=p.read_text(errors='ignore')
-            if bad.search(text): fail.append(str(p))
+# Only scan generated n8n workflow JSON. The checker scripts themselves contain
+# these regex patterns by design, so scanning scripts creates false positives.
+for p in Path('workflows').glob('*.json'):
+    text=p.read_text(errors='ignore')
+    if bad.search(text): fail.append(str(p))
 if fail:
     print('Malformed expression or template-only action found:')
     print('\n'.join(fail))
