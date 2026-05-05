@@ -29,10 +29,22 @@ assert not missing, missing
 print('schema check ok')
 PY
 
-if rg -n '\|\|\s*}}|\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('\''\{\$json' workflows scripts docs -S; then
-  echo "Malformed expression or template-only action found" >&2
-  exit 1
-fi
+python - <<'PY'
+import re, sys
+from pathlib import Path
+bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
+fail=[]
+for root in ['workflows','scripts','docs']:
+    for p in Path(root).rglob('*'):
+        if p.is_file():
+            text=p.read_text(errors='ignore')
+            if bad.search(text):
+                fail.append(str(p))
+if fail:
+    print('Malformed expression or template-only action found:')
+    print('\n'.join(fail))
+    sys.exit(1)
+PY
 
 rg -q "INSERT INTO content_jobs" workflows/create_content_job.json
 rg -q "INSERT INTO content_jobs" workflows/api_create_job.json
