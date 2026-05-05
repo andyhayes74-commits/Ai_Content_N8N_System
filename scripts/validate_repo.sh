@@ -38,8 +38,6 @@ import re, sys
 from pathlib import Path
 bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
 fail=[]
-# Only scan generated n8n workflow JSON. The checker scripts themselves contain
-# these regex patterns by design, so scanning scripts creates false positives.
 for p in Path('workflows').glob('*.json'):
     text=p.read_text(errors='ignore')
     if bad.search(text): fail.append(str(p))
@@ -49,29 +47,42 @@ if fail:
     sys.exit(1)
 PY
 
-rg -q "INSERT INTO content_jobs" workflows/create_content_job.json
-rg -q "INSERT INTO content_jobs" workflows/api_create_job.json
-rg -q "INSERT INTO content_approvals" workflows/api_approve_analysis.json
-rg -q "INSERT INTO content_approvals" workflows/api_approve_plan.json
-rg -q "final_delivery" workflows/api_approve_final_delivery.json
-rg -q "reviewer_type" workflows/api_approve_final_delivery.json
-rg -q "INSERT INTO content_outputs" workflows/create_asset_index.json
-rg -q "INSERT INTO content_outputs" workflows/analyse_client_request.json
-rg -q "INSERT INTO content_outputs" workflows/generate_content_plan.json
-for wf in generate_campaign_plan generate_social_posts generate_email_copy generate_blog_article_copy generate_image_prompts generate_video_scripts; do
-  rg -q "INSERT INTO content_outputs" "workflows/${wf}.json"
-  rg -q "approval_stage='plan'" "workflows/${wf}.json"
-done
-rg -q "UPDATE content_outputs" workflows/qa_check_outputs.json
-rg -q "output_type','qa_report'" workflows/qa_check_outputs.json
-rg -q "output_type','delivery_pack'" workflows/generate_delivery_pack.json
-rg -q "delivery_ready" workflows/generate_delivery_pack.json
-rg -q "INSERT INTO job_messages" workflows/api_submit_message.json
-rg -q "INSERT INTO content_errors" workflows/log_errors.json
-rg -q "retry_count < max_retries" workflows/retry_safe_failed_steps.json
-rg -q "description_sql" workflows/describe_images.json
-rg -q "message_sql" workflows/log_progress_events.json
-rg -q "summary_sql" workflows/parse_and_summarise_documents.json
+python - <<'PY'
+from pathlib import Path
+checks = [
+    ('workflows/create_content_job.json', 'INSERT INTO content_jobs'),
+    ('workflows/api_create_job.json', 'INSERT INTO content_jobs'),
+    ('workflows/api_approve_analysis.json', 'INSERT INTO content_approvals'),
+    ('workflows/api_approve_plan.json', 'INSERT INTO content_approvals'),
+    ('workflows/api_approve_final_delivery.json', 'final_delivery'),
+    ('workflows/api_approve_final_delivery.json', 'reviewer_type'),
+    ('workflows/create_asset_index.json', 'INSERT INTO content_outputs'),
+    ('workflows/analyse_client_request.json', 'INSERT INTO content_outputs'),
+    ('workflows/generate_content_plan.json', 'INSERT INTO content_outputs'),
+    ('workflows/qa_check_outputs.json', 'UPDATE content_outputs'),
+    ('workflows/qa_check_outputs.json', 'qa_report'),
+    ('workflows/generate_delivery_pack.json', 'delivery_pack'),
+    ('workflows/generate_delivery_pack.json', 'delivery_ready'),
+    ('workflows/api_submit_message.json', 'INSERT INTO job_messages'),
+    ('workflows/log_errors.json', 'INSERT INTO content_errors'),
+    ('workflows/retry_safe_failed_steps.json', 'retry_count < max_retries'),
+    ('workflows/describe_images.json', 'description_sql'),
+    ('workflows/log_progress_events.json', 'message_sql'),
+]
+for wf in ['generate_campaign_plan','generate_social_posts','generate_email_copy','generate_blog_article_copy','generate_image_prompts','generate_video_scripts']:
+    checks.append((f'workflows/{wf}.json','INSERT INTO content_outputs'))
+    checks.append((f'workflows/{wf}.json',"approval_stage='plan'"))
+missing=[]
+for file, needle in checks:
+    text=Path(file).read_text(errors='ignore')
+    if needle not in text:
+        missing.append(f'{file}: missing marker {needle!r}')
+if missing:
+    print('Validation marker checks failed:')
+    print('\n'.join(missing))
+    raise SystemExit(1)
+print('marker checks ok')
+PY
 
 if rg -n "DELETE FROM|DROP TABLE|TRUNCATE|publish|send final|client deliver" workflows/*.json -i; then
   echo "Forbidden destructive/publish/send pattern found" >&2

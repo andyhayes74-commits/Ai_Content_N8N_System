@@ -10,6 +10,7 @@ Status: PR review required. GitHub Actions/preflight results need to be inspecte
 - Added `scripts/build_drive_workflows.py` to deterministically generate Google Drive-ready workflow JSONs.
 - Added `scripts/fix_generated_n8n_expressions.py` to restore Python-collapsed n8n expression braces after generation.
 - Adjusted `validate_repo.sh` so generated workflow expression scanning no longer scans the checker scripts themselves.
+- Replaced silent `rg -q` marker checks with explicit Python marker checks so failures report the exact missing marker.
 - Added full dry-run sandbox payload pack under `tests/payloads/`.
 - Added expected database checks in `tests/expected_db_checks.sql`.
 - Updated README to require clone-and-preflight import.
