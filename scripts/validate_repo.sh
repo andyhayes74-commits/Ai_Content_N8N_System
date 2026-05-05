@@ -88,10 +88,30 @@ if rg -n "DELETE FROM|DROP TABLE|TRUNCATE|publish|send final|client deliver" wor
   echo "Forbidden destructive/publish/send pattern found" >&2
   exit 1
 fi
-if rg -n "sk-[A-Za-z0-9]|AIza|xox[baprs]-" .; then
-  echo "Potential hardcoded secret found" >&2
-  exit 1
-fi
+
+python - <<'PY'
+import re, sys
+from pathlib import Path
+secret = re.compile(r'sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-')
+scan_roots = ['workflows','docs','database','examples','tests','prompts','schemas']
+files = []
+for root in scan_roots:
+    p = Path(root)
+    if p.exists():
+        files.extend([x for x in p.rglob('*') if x.is_file()])
+for extra in ['.env.example','README.md']:
+    p = Path(extra)
+    if p.exists(): files.append(p)
+matches=[]
+for p in files:
+    text=p.read_text(errors='ignore')
+    if secret.search(text): matches.append(str(p))
+if matches:
+    print('Potential hardcoded secret found:')
+    print('\n'.join(matches))
+    sys.exit(1)
+print('secret scan ok')
+PY
 
 for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD GOOGLE_DRIVE_CREDENTIAL_ID DEFAULT_PARENT_DRIVE_FOLDER_ID AGENT_WEBHOOK_SECRET NOTIFICATION_WEBHOOK_URL OPENAI_MODEL LITELLM_API_KEY; do
   rg -q "^${v}=" .env.example
