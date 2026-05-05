@@ -1,0 +1,15 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "campaign_name": "Weekend Pop-Up Warmup",
+    "objective": "Build awareness and collect interest before launch.",
+    "phases": [
+      "teaser",
+      "launch announcement",
+      "day-of reminder",
+      "post-event follow-up"
+    ],
+    "unsupported_claims": []
+  }
+}

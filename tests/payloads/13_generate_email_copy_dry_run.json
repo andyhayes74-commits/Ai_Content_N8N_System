@@ -1,0 +1,13 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "subject": "A new weekend pop-up is on the way",
+    "body": "We are preparing a street food pop-up and will share the confirmed menu, place, and timings soon. Keep an eye out for the full launch details.",
+    "missing_information": [
+      "Confirmed date",
+      "Location",
+      "Menu"
+    ]
+  }
+}
