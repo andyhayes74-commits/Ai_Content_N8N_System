@@ -1,0 +1,361 @@
+{
+  "name": "generate_image_prompts",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/generate_image_prompts",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "workflow_name",
+              "value": "generate_image_prompts"
+            },
+            {
+              "name": "job_id",
+              "value": "={{$json.body.job_id || $json.job_id || ''}}"
+            },
+            {
+              "name": "agent_secret",
+              "value": "={{$json.headers['x-agent-secret'] || $json.headers['X-Agent-Secret'] || ''}}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "is_agent_api",
+              "value": "={{$json.path && $json.path.includes('/api_')}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET || 'CHANGE_ME'}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Reject Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\",\"workflow\":\"generate_image_prompts\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Ensure Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        20
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow', 'generate_image_prompts', 'running', '{{ JSON.stringify($json.body || $json) }}'::jsonb\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL\nON CONFLICT (job_id, task_key) DO UPDATE SET status='running', updated_at=now();"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Log Event Start",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        880,
+        20
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_events (job_id,event_type,message,metadata)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow_started', 'Workflow started: generate_image_prompts', jsonb_build_object('workflow','generate_image_prompts')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Gate Check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        20
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT CASE WHEN EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') THEN 1 ELSE 0 END AS allowed;"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[0] && $json[0].allowed !== undefined ? $json[0].allowed : 1}}",
+              "operation": "equal",
+              "value2": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9",
+      "name": "Gate Fail Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_errors (job_id,severity,error_code,error_message,recoverable,context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid,'high','APPROVAL_GATE_BLOCK','Approval gate blocked workflow generate_image_prompts',true,jsonb_build_object('workflow','generate_image_prompts')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
+      }
+    },
+    {
+      "id": "10",
+      "name": "Gate Fail Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"approval_gate_blocked\",\"workflow\":\"generate_image_prompts\"}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "11",
+      "name": "Main DB Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_events (job_id,event_type,message,metadata)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow_action', 'Executed generate_image_prompts', jsonb_build_object('workflow','generate_image_prompts','note','template action')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
+      }
+    },
+    {
+      "id": "12",
+      "name": "Complete Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE content_tasks SET status='completed', updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND task_key='generate_image_prompts';"
+      }
+    },
+    {
+      "id": "13",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"workflow\":\"generate_image_prompts\",\"job_id\":\"{{$json.job_id}}\"}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Ensure Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Task": {
+      "main": [
+        [
+          {
+            "node": "Log Event Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Event Start": {
+      "main": [
+        [
+          {
+            "node": "Gate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Check": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Main DB Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gate Fail Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Fail Log": {
+      "main": [
+        [
+          {
+            "node": "Gate Fail Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main DB Action": {
+      "main": [
+        [
+          {
+            "node": "Complete Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Task": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-hardened"
+}
