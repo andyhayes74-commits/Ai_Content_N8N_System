@@ -5,6 +5,8 @@ Status: PR review required. The required PR checks cover repository validation, 
 ## Completed in this branch
 
 - Added pre-n8n validation, import-preflight, and GitHub Actions guardrails.
+- Updated GitHub Actions to Node 24-capable action versions: `actions/checkout@v6`, `actions/setup-python@v6`, and `actions/setup-node@v6`.
+- Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to the workflow environment for early Node 24 opt-in.
 - Fixed expression guardrails to avoid false positives on valid n8n expressions.
 - Added `scripts/build_llm_workflows.py` to deterministically generate LLM workflow JSONs.
 - Added `scripts/embed_llm_prompts.py` so generated LLM workflows carry embedded task-specific prompts rather than generic prompt-file pointers.
