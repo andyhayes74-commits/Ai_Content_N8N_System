@@ -1,0 +1,29 @@
+name: Pre-n8n readiness
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Run repository validation
+        run: bash scripts/validate_repo.sh
+      - name: Run static workflow audit
+        run: python scripts/static_workflow_audit.py
+      - name: Run pre-n8n readiness check
+        run: python scripts/pre_n8n_readiness_check.py
+      - name: Install n8n CLI
+        run: npm install -g n8n
+      - name: Run n8n import preflight
+        run: bash scripts/n8n_import_preflight.sh
