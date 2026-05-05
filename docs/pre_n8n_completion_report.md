@@ -1,12 +1,13 @@
 # Pre-n8n Completion Report
 
-Status: PR review required. The required PR checks now cover repository validation, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
+Status: PR review required. The required PR checks cover repository validation, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
 
 ## Completed in this branch
 
 - Added pre-n8n validation, import-preflight, and GitHub Actions guardrails.
 - Fixed expression guardrails to avoid false positives on valid n8n expressions.
 - Added `scripts/build_llm_workflows.py` to deterministically generate LLM workflow JSONs.
+- Added `scripts/embed_llm_prompts.py` so generated LLM workflows carry embedded task-specific prompts rather than generic prompt-file pointers.
 - Added `scripts/build_drive_workflows.py` to deterministically generate Google Drive-ready workflow JSONs.
 - Added `scripts/fix_generated_n8n_expressions.py` to restore Python-collapsed n8n expression braces after generation.
 - Adjusted `validate_repo.sh` so generated workflow expression scanning no longer scans the checker scripts themselves.
@@ -19,7 +20,7 @@ Status: PR review required. The required PR checks now cover repository validati
 
 ## Live-mode workflow structure
 
-LLM workflows include Postgres context read, OpenAI/LiteLLM HTTP Request node, JSON response parsing, `content_outputs` persistence, `content_errors` failure logging, and explicit `mode='dry_run'` fallback path.
+LLM workflows include Postgres context read, embedded task-specific prompt instructions, OpenAI/LiteLLM HTTP Request node, JSON response parsing, `content_outputs` persistence, `content_errors` failure logging, and explicit `mode='dry_run'` fallback path.
 
 Drive workflows include Google Drive REST HTTP Request node structure, folder creation structure, subfolder creation structure, file listing structure, delivery-pack upload structure, and Postgres event/output persistence.
 

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 python scripts/build_llm_workflows.py >/dev/null
+python scripts/embed_llm_prompts.py >/dev/null
 python scripts/build_drive_workflows.py >/dev/null
 python scripts/fix_generated_n8n_expressions.py >/dev/null
 

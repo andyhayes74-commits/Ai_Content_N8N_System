@@ -16,6 +16,7 @@ failures=[]
 def fail(m): failures.append(m)
 def run_generators():
     subprocess.run([sys.executable, str(ROOT/'scripts/build_llm_workflows.py')], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([sys.executable, str(ROOT/'scripts/embed_llm_prompts.py')], check=True, stdout=subprocess.DEVNULL)
     subprocess.run([sys.executable, str(ROOT/'scripts/build_drive_workflows.py')], check=True, stdout=subprocess.DEVNULL)
     subprocess.run([sys.executable, str(ROOT/'scripts/fix_generated_n8n_expressions.py')], check=True, stdout=subprocess.DEVNULL)
 def load(name):
@@ -48,6 +49,7 @@ def main():
         if 'LITELLM_BASE_URL' not in text and 'api.openai.com' not in text: fail(f'LLM workflow lacks model endpoint reference: {name}')
         if 'INSERT INTO content_outputs' not in text: fail(f'LLM workflow does not persist content_outputs: {name}')
         if 'content_errors' not in text: fail(f'LLM workflow lacks content_errors failure path marker: {name}')
+        if 'Use prompt file ' in text: fail(f'LLM workflow still uses generic prompt-file pointer: {name}')
     for name in DRIVE_WORKFLOWS:
         data,text=load(name); common(name,text); types=node_types(data)
         if 'n8n-nodes-base.googleDrive' not in types and 'n8n-nodes-base.httpRequest' not in types: fail(f'Drive workflow lacks Google Drive or HTTP Request node: {name}')

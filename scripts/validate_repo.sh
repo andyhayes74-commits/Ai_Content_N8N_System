@@ -2,6 +2,7 @@
 set -euo pipefail
 
 python scripts/build_llm_workflows.py >/dev/null
+python scripts/embed_llm_prompts.py >/dev/null
 python scripts/build_drive_workflows.py >/dev/null
 python scripts/fix_generated_n8n_expressions.py >/dev/null
 
@@ -84,6 +85,20 @@ if missing:
 print('marker checks ok')
 PY
 
+python - <<'PY'
+from pathlib import Path
+bad=[]
+for wf in ['analyse_client_request','generate_content_plan','generate_campaign_plan','generate_social_posts','generate_email_copy','generate_blog_article_copy','generate_image_prompts','generate_video_scripts','qa_check_outputs']:
+    text=Path(f'workflows/{wf}.json').read_text(errors='ignore')
+    if 'Use prompt file ' in text:
+        bad.append(wf)
+if bad:
+    print('Generic prompt-file references remain in generated LLM workflows:')
+    print('\n'.join(bad))
+    raise SystemExit(1)
+print('llm prompt embedding ok')
+PY
+
 if rg -n "DELETE FROM|DROP TABLE|TRUNCATE|publish|send final|client deliver" workflows/*.json -i; then
   echo "Forbidden destructive/publish/send pattern found" >&2
   exit 1
@@ -97,8 +112,7 @@ scan_roots = ['workflows','docs','database','examples','tests','prompts','schema
 files = []
 for root in scan_roots:
     p = Path(root)
-    if p.exists():
-        files.extend([x for x in p.rglob('*') if x.is_file()])
+    if p.exists(): files.extend([x for x in p.rglob('*') if x.is_file()])
 for extra in ['.env.example','README.md']:
     p = Path(extra)
     if p.exists(): files.append(p)
