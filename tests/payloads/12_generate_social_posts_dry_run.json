@@ -1,0 +1,18 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "posts": [
+      {
+        "platform": "instagram",
+        "copy": "Something tasty is getting ready for the weekend. Full pop-up details coming soon.",
+        "notes": "Avoids date/location claims until confirmed."
+      },
+      {
+        "platform": "facebook",
+        "copy": "We are preparing a weekend street food pop-up. Follow for confirmed menu, location, and opening details.",
+        "notes": "Missing details flagged indirectly."
+      }
+    ]
+  }
+}

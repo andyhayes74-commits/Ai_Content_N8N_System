@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-BAD = re.compile(r"\|\|\s*}}|\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('\{\$json")
+BAD = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
 
 for path in sorted(Path('workflows').glob('*.json')):
     data = json.loads(path.read_text())
@@ -21,6 +21,8 @@ for path in sorted(Path('workflows').glob('*.json')):
         'auth_header': 'x-agent-secret' in text or 'X-Agent-Secret' in text,
         'approval_gate': 'content_approvals' in text,
         'inserts_outputs': 'INSERT INTO content_outputs' in text,
+        'http_request': 'n8n-nodes-base.httpRequest' in text,
+        'google_drive': 'n8n-nodes-base.googleDrive' in text,
         'malformed': bool(BAD.search(text)),
     }
     print(summary)

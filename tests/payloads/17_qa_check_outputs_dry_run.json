@@ -1,0 +1,22 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "overall_status": "review_required",
+    "checks": [
+      {
+        "check": "unsupported_claims",
+        "status": "pass",
+        "notes": "No specific date, price, venue, guarantee, or endorsement invented."
+      },
+      {
+        "check": "missing_information",
+        "status": "needs_review",
+        "notes": "Venue, launch date, menu, and opening times remain missing."
+      }
+    ],
+    "required_revisions": [
+      "Add confirmed venue, date, menu, and opening times before publication."
+    ]
+  }
+}

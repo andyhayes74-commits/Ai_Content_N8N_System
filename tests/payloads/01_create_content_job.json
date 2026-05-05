@@ -1,0 +1,15 @@
+{
+  "project_name": "Sandbox Launch Campaign",
+  "brief_text": "Create a small content pack for a fictional local street food brand launching a weekend pop-up. Keep claims modest and flag any missing information.",
+  "created_by": "andy",
+  "client_code": "sandbox_client",
+  "client_name": "Sandbox Street Kitchen",
+  "requested_outputs": [
+    "campaign_plan",
+    "social_posts",
+    "email_copy",
+    "blog_article",
+    "image_prompts",
+    "video_scripts"
+  ]
+}

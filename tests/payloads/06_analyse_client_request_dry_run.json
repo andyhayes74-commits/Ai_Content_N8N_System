@@ -1,0 +1,31 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "facts": [
+      "The client is a fictional local street food brand.",
+      "The requested pack is for a weekend pop-up launch."
+    ],
+    "assumptions": [
+      "No real venue, dates, pricing, or menu claims should be invented."
+    ],
+    "missing_information": [
+      "Confirmed launch date",
+      "Venue/location",
+      "Menu details",
+      "Opening times",
+      "Brand tone preferences"
+    ],
+    "risk_flags": [
+      "Avoid unsupported claims about prices, dates, endorsements, or ingredients."
+    ],
+    "recommended_outputs": [
+      "campaign_plan",
+      "social_posts",
+      "email_copy",
+      "blog_article",
+      "image_prompts",
+      "video_scripts"
+    ]
+  }
+}

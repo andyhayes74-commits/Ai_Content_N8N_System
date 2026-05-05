@@ -1,0 +1,17 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "prompts": [
+      {
+        "title": "Street food prep scene",
+        "prompt": "Candid editorial-style image of a street food team preparing ingredients in a compact kitchen, warm practical lighting, no visible logos, no claims about real location."
+      }
+    ],
+    "must_avoid": [
+      "real venue signage unless supplied",
+      "invented testimonials",
+      "specific prices or dates"
+    ]
+  }
+}

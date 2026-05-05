@@ -1,0 +1,22 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "strategy_summary": "Create a modest launch pack that builds awareness without unsupported claims.",
+    "content_pillars": [
+      "local food discovery",
+      "weekend pop-up announcement",
+      "behind-the-scenes preparation",
+      "clear missing details callouts"
+    ],
+    "outputs": [
+      "campaign_plan",
+      "social_posts",
+      "email_copy",
+      "blog_article",
+      "image_prompts",
+      "video_scripts"
+    ],
+    "human_review_required": true
+  }
+}

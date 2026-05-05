@@ -1,0 +1,53 @@
+name: Pre-n8n readiness
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_n8n_import:
+        description: 'Run the slower n8n CLI import preflight'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Run repository validation
+        run: bash scripts/validate_repo.sh
+      - name: Run static workflow audit
+        run: python scripts/static_workflow_audit.py
+      - name: Run pre-n8n readiness check
+        run: python scripts/pre_n8n_readiness_check.py
+
+  n8n-import-preflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_n8n_import == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install n8n CLI
+        run: npm install -g n8n
+      - name: Run n8n import preflight
+        run: bash scripts/n8n_import_preflight.sh

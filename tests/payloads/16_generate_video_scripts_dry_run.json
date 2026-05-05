@@ -1,0 +1,16 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "short_video": {
+      "duration_seconds": 20,
+      "hook": "Something is cooking for the weekend.",
+      "shots": [
+        "hands prepping ingredients",
+        "street food packaging being arranged",
+        "simple text card saying details coming soon"
+      ],
+      "capcut_notes": "Use quick cuts, light percussion, and text overlays. Do not include venue/date until confirmed."
+    }
+  }
+}

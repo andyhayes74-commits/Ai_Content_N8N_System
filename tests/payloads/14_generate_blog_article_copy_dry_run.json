@@ -1,0 +1,9 @@
+{
+  "job_id": "REPLACE_WITH_JOB_ID",
+  "mode": "dry_run",
+  "generated_output": {
+    "title": "A New Street Food Pop-Up Is Getting Ready",
+    "body_markdown": "A new local street food pop-up is being prepared for a weekend launch. Confirmed details such as the venue, opening times, and menu should be added before publication.",
+    "human_review_required": true
+  }
+}
