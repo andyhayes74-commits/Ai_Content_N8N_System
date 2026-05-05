@@ -1,64 +1,41 @@
-# v1.0 RC Audit (Post-Hardening Pass)
+# v1.0 RC Audit (ChatGPT Repair Branch)
 
-Audit date: 2026-05-05 (UTC).
+Audit date: 2026-05-05.
 
-## What changed in hardening pass
-- Replaced non-executable placeholder workflow shells with connected n8n node chains in every `workflows/*.json` file.
-- Added runtime secret checks (`x-agent-secret` vs `AGENT_WEBHOOK_SECRET`) for webhook-triggered workflows.
-- Added explicit Postgres task/event/error writes per workflow.
-- Added approval-gate SQL checks for analysis -> plan, plan -> output routing/generation, and final-delivery gate on delivery pack.
-- Expanded `scripts/validate_repo.sh` to validate expected workflow files, webhook paths, SQL table references, approval checks, and forbidden destructive patterns.
+## Status
+This branch is now a credentials-ready, database-backed release candidate for sandbox import testing. It is not production-tested yet.
 
-## 1) Requirement Coverage Matrix
-| Requirement | Implemented file(s) | Status | Notes |
-|---|---|---|---|
-| Modular workflow set exists | `workflows/*.json` | implemented | All required filenames present with connected nodes. |
-| Durable Postgres state writes | `workflows/*.json`, `database/schema.sql` | partial | Task/event/error writes implemented; domain-specific output inserts remain limited template actions. |
-| Approval gates runtime enforcement | `workflows/generate_content_plan.json`, `workflows/route_output_tasks.json`, `workflows/generate_*`, `workflows/generate_delivery_pack.json` | partial | SQL gate checks added; full business branching still template-grade. |
-| Agent secret validation | `workflows/api_*.json` and all webhook flows | implemented | Header secret check added (`x-agent-secret`). |
-| No destructive/publish/send behavior | `workflows/*.json`, `scripts/validate_repo.sh` | implemented | No delete/publish/send actions present; validation blocks forbidden patterns. |
-| Fixture-driven dry run path | `examples/*.json`, `tests/sandbox_test_plan.md` | implemented | End-to-end dry-run order documented. |
+## Implemented
+- Real job creation through `create_content_job` and `api_create_job`.
+- Agent secret validation on webhook workflows using `x-agent-secret`.
+- Real approval rows for analysis, plan, and final delivery.
+- Final delivery approval requires `reviewer_type='human'`.
+- Request analysis, asset index, content plan, generation outputs, QA report, and delivery pack are persisted in `content_outputs`.
+- Assets are registered and indexed through `content_assets`.
+- Audio/video references are marked honestly as reference-only unless transcription is wired later.
+- Supervisor status, progress, error, pause, resume, cancel, revision, message, and retry workflows are database-backed.
+- Validation scripts check workflow presence, JSON syntax, table-action markers, bad n8n expression patterns, forbidden destructive/publish/send terms, and obvious hardcoded secret patterns.
 
-## 2) n8n Workflow Readiness Matrix
-All workflows are now valid import-ready JSON with connected nodes and executable SQL operations.
+## Credential-ready but not live-tested
+- Live n8n workflow import.
+- Live Postgres execution.
+- Google Drive OAuth folder/file creation and listing.
+- OpenAI/LiteLLM model calls.
+- OpenClaw/Hermes live supervisor callbacks.
+- Notification webhook delivery.
 
-Common runtime dependencies:
-- Credential: n8n Postgres credential (required now).
-- Env vars: `AGENT_WEBHOOK_SECRET`, `POSTGRES_*`; others remain for future Google Drive/LLM integration.
-- DB tables touched: `content_tasks`, `content_events`, `content_errors` (all); approval tables on gated workflows.
+## Known limitations
+- Model calls are represented by dry-run/generated payload entry points. Live OpenAI/LiteLLM HTTP nodes should be wired and tested in n8n once credentials exist.
+- Google Drive workflows record metadata and are prepared for credentials, but do not yet prove live Drive folder/file operations.
+- The repo is ready for sandbox testing, not client production use.
 
-Logic maturity summary:
-- **Executable template logic**: yes (webhook -> auth -> task/event -> gate -> response).
-- **Business-complete production logic**: not yet (generation/output persistence still simplified template events for many workflows).
-
-## 3) Safety Gate Verification
-- Analysis approval gate: enforced in `generate_content_plan` (checks `content_approvals` stage `analysis`).
-- Content plan approval gate: enforced in output routing/generation workflows (checks stage `plan`).
-- Final delivery approval gate: enforced in `generate_delivery_pack` (checks stage `final_delivery`).
-- Agent boundary: secret validation added; no schema edit, credential change, delete, publish, or final send operations implemented.
-- No-delete/no-publish/no-send: enforced by workflow content + validation script forbidden-pattern checks.
-
-## 4) Remaining Placeholder Inventory
-- Domain-specific SQL payload handling remains generic template actions in many workflows.
-- `content_outputs` writes are not yet comprehensively implemented for every generation workflow.
-- Google Drive and LLM nodes are not wired because live credentials/services are unavailable in this environment.
-- Agent role granularity beyond shared secret (e.g., per-action RBAC) is not implemented.
-
-## 5) Dry-Run Execution Path
-1. Configure `.env` from `.env.example`.
-2. Apply `database/schema.sql` + `database/seed_reference.sql` to Postgres.
-3. Import all `workflows/*.json` into n8n.
-4. Call `v1/create_content_job` with `examples/client_brief.json` and `x-agent-secret` header.
-5. Call asset and analysis flows in sequence using `examples/asset_index.json` and `examples/request_analysis.json`.
-6. Add approval rows in `content_approvals` for `analysis`, then invoke `generate_content_plan`.
-7. Add approval row for `plan`, then invoke `route_output_tasks` and output-generation workflows.
-8. Invoke `qa_check_outputs` and `generate_delivery_pack` (requires `final_delivery` approval row).
-9. Confirm task/event/error records in Postgres tables.
-
-## 6) Remaining Live-Test Requirements
-- Live n8n execution against real Postgres credential.
-- Real Google Drive credential wiring and folder operations.
-- Real LLM endpoint calls using prompts/schemas.
-- Supervisor integration tests with OpenClaw/Hermes callbacks.
-
-No live integration test was executed in this Codex environment.
+## First sandbox path
+1. Import workflows into a test n8n instance.
+2. Configure Postgres credential and apply `database/schema.sql`.
+3. Create a job via `create_content_job`.
+4. Register or prepare Drive folder metadata.
+5. Register assets and create asset index.
+6. Store request analysis, approve analysis, store content plan, approve plan.
+7. Route tasks and generate outputs using dry-run payloads.
+8. Run QA, human final approval, and delivery pack.
+9. Inspect `content_jobs`, `content_outputs`, `content_events`, `content_errors`, and `content_approvals`.

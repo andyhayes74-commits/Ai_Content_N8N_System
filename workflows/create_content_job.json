@@ -19,36 +19,14 @@
     {
       "id": "2",
       "name": "Normalize Input",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         220,
         0
       ],
       "parameters": {
-        "keepOnlySet": false,
-        "values": {
-          "string": [
-            {
-              "name": "workflow_name",
-              "value": "create_content_job"
-            },
-            {
-              "name": "job_id",
-              "value": "={{$json.body.job_id || $json.job_id || ''}}"
-            },
-            {
-              "name": "agent_secret",
-              "value": "={{$json.headers['x-agent-secret'] || $json.headers['X-Agent-Secret'] || ''}}"
-            }
-          ],
-          "boolean": [
-            {
-              "name": "is_agent_api",
-              "value": "={{$json.path && $json.path.includes('/api_')}}"
-            }
-          ]
-        }
+        "jsCode": "const body = $json.body ?? $json;\nconst headers = $json.headers ?? {};\nconst jobId = body.job_id || $json.job_id || \"\";\nconst rawBody = JSON.stringify(body).replace(/'/g, \"''\");\nconst decision = body.decision || \"approved\";\nconst allowedDecision = [\"approved\", \"rejected\", \"revision_requested\"].includes(decision);\nreturn [{\n  json: {\n    ...body,\n    job_id: jobId,\n    agent_secret: headers[\"x-agent-secret\"] || headers[\"X-Agent-Secret\"] || \"\",\n    body_sql: rawBody,\n    decision,\n    allowed_decision: allowedDecision,\n    reviewer_id: body.reviewer_id || \"andy\",\n    reviewer_type: body.reviewer_type || \"\"\n  }\n}];"
       }
     },
     {
@@ -66,7 +44,7 @@
             {
               "value1": "={{$json.agent_secret}}",
               "operation": "equal",
-              "value2": "={{$env.AGENT_WEBHOOK_SECRET || 'CHANGE_ME'}}"
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
             }
           ]
         }
@@ -83,7 +61,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\",\"workflow\":\"create_content_job\"}",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
         "options": {
           "responseCode": 401
         }
@@ -91,140 +69,83 @@
     },
     {
       "id": "5",
-      "name": "Ensure Task",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 1,
+      "name": "Validate Required Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         660,
-        20
+        0
       ],
       "parameters": {
-        "operation": "executeQuery",
-        "query": "=INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow', 'create_content_job', 'running', '{{ JSON.stringify($json.body || $json) }}'::jsonb\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL\nON CONFLICT (job_id, task_key) DO UPDATE SET status='running', updated_at=now();"
+        "jsCode": "const missing = [];\nfor (const field of [\"project_name\",\"brief_text\",\"created_by\"]) {\n  if (!$json[field]) missing.push(field);\n}\nreturn [{json: {...$json, missing, is_valid: missing.length === 0}}];"
       }
     },
     {
       "id": "6",
-      "name": "Log Event Start",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 1,
-      "position": [
-        880,
-        20
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=INSERT INTO content_events (job_id,event_type,message,metadata)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow_started', 'Workflow started: create_content_job', jsonb_build_object('workflow','create_content_job')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
-      }
-    },
-    {
-      "id": "7",
-      "name": "Gate Check",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 1,
-      "position": [
-        1100,
-        20
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=SELECT 1;"
-      }
-    },
-    {
-      "id": "8",
-      "name": "Allowed?",
+      "name": "Is Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        1320,
-        20
+        880,
+        0
       ],
       "parameters": {
         "conditions": {
-          "number": [
+          "boolean": [
             {
-              "value1": "={{$json[0] && $json[0].allowed !== undefined ? $json[0].allowed : 1}}",
+              "value1": "={{$json.is_valid}}",
               "operation": "equal",
-              "value2": 1
+              "value2": true
             }
           ]
         }
       }
     },
     {
-      "id": "9",
-      "name": "Gate Fail Log",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 1,
-      "position": [
-        1540,
-        -80
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=INSERT INTO content_errors (job_id,severity,error_code,error_message,recoverable,context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid,'high','APPROVAL_GATE_BLOCK','Approval gate blocked workflow create_content_job',true,jsonb_build_object('workflow','create_content_job')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
-      }
-    },
-    {
-      "id": "10",
-      "name": "Gate Fail Response",
+      "id": "7",
+      "name": "Reject Missing Fields",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1760,
-        -80
+        1100,
+        -120
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"ok\":false,\"error\":\"approval_gate_blocked\",\"workflow\":\"create_content_job\"}",
+        "responseBody": "={\"ok\":false,\"error\":\"missing_required_fields\",\"missing\":{{$json.missing}}}",
         "options": {
-          "responseCode": 409
+          "responseCode": 400
         }
       }
     },
     {
-      "id": "11",
-      "name": "Main DB Action",
+      "id": "8",
+      "name": "Create Job",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 1,
       "position": [
-        1540,
+        1100,
         80
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO content_events (job_id,event_type,message,metadata)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'workflow_action', 'Executed create_content_job', jsonb_build_object('workflow','create_content_job','note','template action')\nWHERE NULLIF('{{$json.job_id}}','') IS NOT NULL;"
+        "query": "=WITH payload AS (\n  SELECT '{{$json.body_sql}}'::jsonb AS body\n), client_upsert AS (\n  INSERT INTO client_profiles (client_code, client_name, preferred_tone, industry, compliance_notes)\n  SELECT body->>'client_code',\n         COALESCE(NULLIF(body->>'client_name',''), body->>'client_code'),\n         body->>'preferred_tone',\n         body->>'industry',\n         body->>'compliance_notes'\n  FROM payload\n  WHERE NULLIF(body->>'client_code','') IS NOT NULL\n  ON CONFLICT (client_code) DO UPDATE SET\n    client_name = EXCLUDED.client_name,\n    preferred_tone = COALESCE(EXCLUDED.preferred_tone, client_profiles.preferred_tone),\n    industry = COALESCE(EXCLUDED.industry, client_profiles.industry),\n    compliance_notes = COALESCE(EXCLUDED.compliance_notes, client_profiles.compliance_notes),\n    updated_at = now()\n  RETURNING id\n), job_insert AS (\n  INSERT INTO content_jobs (\n    external_job_ref, client_profile_id, project_name, brief_text, requested_outputs, status, created_by\n  )\n  SELECT NULLIF(body->>'external_job_ref',''),\n         (SELECT id FROM client_upsert LIMIT 1),\n         body->>'project_name',\n         body->>'brief_text',\n         COALESCE(body->'requested_outputs', '[]'::jsonb),\n         'intake_complete'::job_status,\n         body->>'created_by'\n  FROM payload\n  RETURNING id, status\n), task_insert AS (\n  INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload)\n  SELECT id, 'intake', 'intake', 'completed', (SELECT body FROM payload)\n  FROM job_insert\n), event_insert AS (\n  INSERT INTO content_events (job_id, event_type, status_to, message, metadata)\n  SELECT id, 'job_created', status, 'Content job created', jsonb_build_object('source','create_content_job')\n  FROM job_insert\n)\nSELECT id::text AS job_id, status::text AS status FROM job_insert;"
       }
     },
     {
-      "id": "12",
-      "name": "Complete Task",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 1,
-      "position": [
-        1760,
-        80
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "=UPDATE content_tasks SET status='completed', updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND task_key='create_content_job';"
-      }
-    },
-    {
-      "id": "13",
-      "name": "Success Response",
+      "id": "9",
+      "name": "Return Created Job",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1980,
+        1320,
         80
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\"ok\":true,\"workflow\":\"create_content_job\",\"job_id\":\"{{$json.job_id}}\"}",
+        "responseBody": "={\"ok\":true,\"job_id\":\"{{$json.job_id}}\",\"status\":\"{{$json.status}}\"}",
         "options": {
-          "responseCode": 200
+          "responseCode": 201
         }
       }
     }
@@ -256,7 +177,7 @@
       "main": [
         [
           {
-            "node": "Ensure Task",
+            "node": "Validate Required Fields",
             "type": "main",
             "index": 0
           }
@@ -270,84 +191,40 @@
         ]
       ]
     },
-    "Ensure Task": {
+    "Validate Required Fields": {
       "main": [
         [
           {
-            "node": "Log Event Start",
+            "node": "Is Valid?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Log Event Start": {
+    "Is Valid?": {
       "main": [
         [
           {
-            "node": "Gate Check",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gate Check": {
-      "main": [
-        [
-          {
-            "node": "Allowed?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Allowed?": {
-      "main": [
-        [
-          {
-            "node": "Main DB Action",
+            "node": "Create Job",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Gate Fail Log",
+            "node": "Reject Missing Fields",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gate Fail Log": {
+    "Create Job": {
       "main": [
         [
           {
-            "node": "Gate Fail Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Main DB Action": {
-      "main": [
-        [
-          {
-            "node": "Complete Task",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Complete Task": {
-      "main": [
-        [
-          {
-            "node": "Success Response",
+            "node": "Return Created Job",
             "type": "main",
             "index": 0
           }
@@ -357,5 +234,5 @@
   },
   "active": false,
   "settings": {},
-  "versionId": "v1.0-rc-hardened"
+  "versionId": "v1.0-rc-chatgpt-repair"
 }
