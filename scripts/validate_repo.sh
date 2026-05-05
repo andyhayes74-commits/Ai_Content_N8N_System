@@ -3,6 +3,7 @@ set -euo pipefail
 
 python scripts/build_llm_workflows.py >/dev/null
 python scripts/build_drive_workflows.py >/dev/null
+python scripts/fix_generated_n8n_expressions.py >/dev/null
 
 required_workflows=(
 create_content_job register_existing_drive_folder create_new_drive_project_folder create_standard_folder_structure
@@ -35,7 +36,7 @@ PY
 python - <<'PY'
 import re, sys
 from pathlib import Path
-bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
+bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
 fail=[]
 for root in ['workflows','scripts','docs']:
     for p in Path(root).rglob('*'):

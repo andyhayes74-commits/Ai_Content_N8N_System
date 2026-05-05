@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-n8n readiness checks for the AI Content n8n System."""
 from __future__ import annotations
-import json, re, sys
+import json, re, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / 'workflows'
@@ -11,9 +11,13 @@ DRIVE_WORKFLOWS = ['create_new_drive_project_folder','create_standard_folder_str
 REQUIRED_ENV = ['POSTGRES_HOST','POSTGRES_PORT','POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD','GOOGLE_DRIVE_CREDENTIAL_ID','DEFAULT_PARENT_DRIVE_FOLDER_ID','OPENAI_API_KEY','OPENAI_MODEL','LITELLM_BASE_URL','LITELLM_API_KEY','AGENT_WEBHOOK_SECRET','NOTIFICATION_WEBHOOK_URL']
 FORBIDDEN = re.compile(r'DELETE FROM|DROP TABLE|TRUNCATE|send final|client deliver|publish', re.I)
 SECRET_PATTERNS = re.compile(r'sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-')
-BAD_EXPR = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
+BAD_EXPR = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
 failures=[]
 def fail(m): failures.append(m)
+def run_generators():
+    subprocess.run([sys.executable, str(ROOT/'scripts/build_llm_workflows.py')], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([sys.executable, str(ROOT/'scripts/build_drive_workflows.py')], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([sys.executable, str(ROOT/'scripts/fix_generated_n8n_expressions.py')], check=True, stdout=subprocess.DEVNULL)
 def load(name):
     p=WORKFLOWS/f'{name}.json'
     if not p.exists(): fail(f'Missing workflow: {p}'); return {},''
@@ -28,6 +32,7 @@ def common(name,text):
     if SECRET_PATTERNS.search(text): fail(f'Possible hardcoded secret found in {name}')
     if 'x-agent-secret' not in text and 'X-Agent-Secret' not in text: fail(f'Workflow lacks agent secret check: {name}')
 def main():
+    run_generators()
     env=ENV_EXAMPLE.read_text() if ENV_EXAMPLE.exists() else ''
     for k in REQUIRED_ENV:
         if f'{k}=' not in env: fail(f'Missing .env.example placeholder: {k}')
