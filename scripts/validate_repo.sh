@@ -2,6 +2,7 @@
 set -euo pipefail
 
 python scripts/build_llm_workflows.py >/dev/null
+python scripts/build_drive_workflows.py >/dev/null
 
 required_workflows=(
 create_content_job register_existing_drive_folder create_new_drive_project_folder create_standard_folder_structure
