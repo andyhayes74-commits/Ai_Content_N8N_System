@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python scripts/build_llm_workflows.py >/dev/null
+
 required_workflows=(
 create_content_job register_existing_drive_folder create_new_drive_project_folder create_standard_folder_structure
 scan_drive_assets parse_and_summarise_documents describe_images handle_audio_video_references create_asset_index
@@ -38,8 +40,7 @@ for root in ['workflows','scripts','docs']:
     for p in Path(root).rglob('*'):
         if p.is_file():
             text=p.read_text(errors='ignore')
-            if bad.search(text):
-                fail.append(str(p))
+            if bad.search(text): fail.append(str(p))
 if fail:
     print('Malformed expression or template-only action found:')
     print('\n'.join(fail))
@@ -79,7 +80,7 @@ if rg -n "sk-[A-Za-z0-9]|AIza|xox[baprs]-" .; then
   exit 1
 fi
 
-for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD GOOGLE_DRIVE_CREDENTIAL_ID DEFAULT_PARENT_DRIVE_FOLDER_ID AGENT_WEBHOOK_SECRET NOTIFICATION_WEBHOOK_URL; do
+for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD GOOGLE_DRIVE_CREDENTIAL_ID DEFAULT_PARENT_DRIVE_FOLDER_ID AGENT_WEBHOOK_SECRET NOTIFICATION_WEBHOOK_URL OPENAI_MODEL LITELLM_API_KEY; do
   rg -q "^${v}=" .env.example
 done
 
