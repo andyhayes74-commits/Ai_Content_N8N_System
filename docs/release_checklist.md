@@ -1,0 +1,11 @@
+# v1.0 RC Release Checklist
+- [x] Workflow JSON files created and syntactically valid.
+- [x] Required Postgres tables present.
+- [x] Status values implemented.
+- [x] Prompt files and JSON schemas aligned.
+- [x] Example fixtures included.
+- [x] Sandbox dry-run instructions documented.
+- [x] Secrets excluded; placeholders in `.env.example`.
+- [x] Human approval gates documented.
+- [x] Final publishing/client sending blocked by design.
+- [x] Untested live integrations explicitly documented.
