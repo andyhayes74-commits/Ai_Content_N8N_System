@@ -54,6 +54,9 @@ rg -q "delivery_ready" workflows/generate_delivery_pack.json
 rg -q "INSERT INTO job_messages" workflows/api_submit_message.json
 rg -q "INSERT INTO content_errors" workflows/log_errors.json
 rg -q "retry_count < max_retries" workflows/retry_safe_failed_steps.json
+rg -q "description_sql" workflows/describe_images.json
+rg -q "message_sql" workflows/log_progress_events.json
+rg -q "summary_sql" workflows/parse_and_summarise_documents.json
 
 if rg -n "DELETE FROM|DROP TABLE|TRUNCATE|publish|send final|client deliver" workflows/*.json -i; then
   echo "Forbidden destructive/publish/send pattern found" >&2
