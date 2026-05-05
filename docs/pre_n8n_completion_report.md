@@ -1,6 +1,6 @@
 # Pre-n8n Completion Report
 
-Status: PR review required. GitHub Actions/preflight results need to be inspected after this fix lands.
+Status: PR review required. The required PR checks now cover repository validation, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
 
 ## Completed in this branch
 
@@ -12,6 +12,7 @@ Status: PR review required. GitHub Actions/preflight results need to be inspecte
 - Adjusted `validate_repo.sh` so generated workflow expression scanning no longer scans the checker scripts themselves.
 - Replaced silent `rg -q` marker checks with explicit Python marker checks so failures report the exact missing marker.
 - Narrowed the committed-secret scan so it scans repo content and generated workflows, not the scanner regex code itself.
+- Made the n8n CLI import preflight manual in GitHub Actions to avoid blocking PR checks on a slow global n8n install.
 - Added full dry-run sandbox payload pack under `tests/payloads/`.
 - Added expected database checks in `tests/expected_db_checks.sql`.
 - Updated README to require clone-and-preflight import.
@@ -31,3 +32,13 @@ These cannot be fully confirmed until n8n has real credentials:
 - OpenAI/LiteLLM model responses.
 - Notification webhook delivery.
 - OpenClaw/Hermes live callbacks.
+
+## Manual import preflight
+
+To run the heavier n8n CLI import check in GitHub Actions, trigger the `Pre-n8n readiness` workflow manually and choose `run_n8n_import=true`.
+
+For local/server preflight, run:
+
+```bash
+bash scripts/n8n_import_preflight.sh
+```
