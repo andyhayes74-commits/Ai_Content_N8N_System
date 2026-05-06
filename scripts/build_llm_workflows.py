@@ -77,8 +77,10 @@ SELECT EXISTS (SELECT 1 FROM job) AS allowed,
        '[]'::text AS asset_summary_json;"""
     normalize = """const body=$json.body??$json;
 const headers=$json.headers??{};
+const rawJobId=String(body.job_id||$json.job_id||'');
+const jobId=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawJobId)?rawJobId:'';
 const fallback=body.generated_output||body.output||body.request_analysis||body.content_plan||body.qa_report||{mode:'dry_run_fallback',note:'Explicit dry_run fallback payload was not supplied'};
-return [{json:{...body,job_id:body.job_id||$json.job_id||'',mode:body.mode||'live',fallback_payload:fallback,agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"""
+return [{json:{...body,job_id:jobId,mode:body.mode||'live',fallback_payload:fallback,agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"""
     build_request = f"""const ctx=$json;
 function safeJson(value, fallback) {{ try {{ return JSON.parse(value || ''); }} catch (e) {{ return fallback; }} }}
 const prompt = `You are running workflow {name}. Use prompt file {prompt_file}. Return strict JSON only. Do not invent unsupported client facts. Separate facts, assumptions, missing information, risk flags, and source material used.`;

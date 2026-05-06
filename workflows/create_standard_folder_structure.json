@@ -1,1 +1,251 @@
-{"name":"create_standard_folder_structure","nodes":[{"id":"1","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":1,"position":[0,0],"parameters":{"path":"v1/create_standard_folder_structure","httpMethod":"POST","responseMode":"responseNode"}},{"id":"2","name":"Normalize Input","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0],"parameters":{"jsCode":"const body=$json.body??$json;const headers=$json.headers??{};return [{json:{...body,job_id:body.job_id||$json.job_id||'',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"}},{"id":"3","name":"Check Secret","type":"n8n-nodes-base.if","typeVersion":1,"position":[440,0],"parameters":{"conditions":{"string":[{"value1":"={{$json.agent_secret}}","operation":"equal","value2":"={{$env.AGENT_WEBHOOK_SECRET}}"}]}}},{"id":"4","name":"Reject Unauthorized","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,-120],"parameters":{"respondWith":"json","responseBody":"={\"ok\":false,\"error\":\"unauthorized\"}","options":{"responseCode":401}}},{"id":"5","name":"Record Folder Structure","type":"n8n-nodes-base.postgres","typeVersion":1,"position":[660,0],"parameters":{"operation":"executeQuery","query":"=WITH folders(name) AS (VALUES ('00_Admin'),('01_Input'),('02_Parsed'),('03_Strategy'),('04_Copy'),('05_Images'),('06_Video'),('07_Delivery')), event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) SELECT NULLIF('{{$json.job_id}}','')::uuid,'drive_standard_folders_prepared','Standard folder structure prepared',jsonb_build_object('credential','GOOGLE_DRIVE_AI_CONTENT','folders',jsonb_agg(name)) FROM folders) SELECT jsonb_agg(name) AS folders FROM folders;"}},{"id":"6","name":"Respond","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[900,0],"parameters":{"respondWith":"json","responseBody":"={\"ok\":true,\"workflow\":\"create_standard_folder_structure\",\"folders\":{{$json.folders}}}","options":{"responseCode":200}}}],"connections":{"Webhook":{"main":[[{"node":"Normalize Input","type":"main","index":0}]]},"Normalize Input":{"main":[[{"node":"Check Secret","type":"main","index":0}]]},"Check Secret":{"main":[[{"node":"Record Folder Structure","type":"main","index":0}],[{"node":"Reject Unauthorized","type":"main","index":0}]]},"Record Folder Structure":{"main":[[{"node":"Respond","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"v1.0-rc-chatgpt-repair"}
+{
+  "name": "create_standard_folder_structure",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/create_standard_folder_structure",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body=$json.body??$json;const headers=$json.headers??{};const rawJobId=String(body.job_id||$json.job_id||'');const jobId=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawJobId)?rawJobId:'';return [{json:{...body,job_id:jobId,mode:body.mode||'live',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Reject Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id::text AS job_id, drive_root_folder_id FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Build Folder Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const folders=[\"00_Admin\", \"01_Input\", \"02_Parsed\", \"03_Strategy\", \"04_Copy\", \"05_Images\", \"06_Video\", \"07_Delivery\"];return folders.map(name=>({json:{job_id:$json.job_id,parent_folder_id:$json.drive_root_folder_id,folder_name:name,drive_request:{name,mimeType:'application/vnd.google-apps.folder',parents:[$json.drive_root_folder_id]},credential_marker:'GOOGLE_DRIVE_AI_CONTENT'}}));"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Create Subfolder in Google Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.GOOGLE_DRIVE_ACCESS_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.drive_request)}}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Record Folder Structure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'drive_standard_folder_created','Standard Drive subfolder created or prepared',jsonb_build_object('folder_name','{{$json.folder_name}}','drive_folder_id','{{$json.id || \"PENDING_GOOGLE_DRIVE_CREATION\"}}','credential','GOOGLE_DRIVE_AI_CONTENT')) RETURNING id) SELECT id::text AS event_id;"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"workflow\":\"create_standard_folder_structure\",\"mode\":\"per-folder events recorded\"}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Build Folder Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Folder Batch": {
+      "main": [
+        [
+          {
+            "node": "Create Subfolder in Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Subfolder in Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Record Folder Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Folder Structure": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-pre-n8n-drive"
+}

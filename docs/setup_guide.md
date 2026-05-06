@@ -13,21 +13,23 @@ python scripts/pre_n8n_readiness_check.py
 bash scripts/n8n_import_preflight.sh
 ```
 
-The validation/preflight scripts regenerate live-mode LLM and Drive workflow JSONs before checking/importing:
+The validation/preflight scripts regenerate live-mode LLM and Drive workflow JSONs, then fail if the generated files differ from the committed transfer baseline:
 
 ```bash
 python scripts/build_llm_workflows.py
+python scripts/embed_llm_prompts.py
 python scripts/build_drive_workflows.py
+python scripts/fix_generated_n8n_expressions.py
 ```
 
-Do not import stale workflow files without running the preflight scripts.
+Do not import if the drift guard reports changes under `workflows/`; regenerate, review, and commit those files first.
 
 ## Required credentials/config
 
 - Postgres n8n credential: `POSTGRES_AI_CONTENT_DB`.
-- Google Drive n8n credential or OAuth marker: `GOOGLE_DRIVE_AI_CONTENT`.
+- Google Drive OAuth/access-token configuration: `GOOGLE_DRIVE_ACCESS_TOKEN` plus the n8n credential marker `GOOGLE_DRIVE_AI_CONTENT`.
 - OpenAI/LiteLLM HTTP credential: `HTTP_OPENAI_OR_LITELLM`.
-- Environment variables from `.env.example`, especially `AGENT_WEBHOOK_SECRET`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and `DEFAULT_PARENT_DRIVE_FOLDER_ID`.
+- Environment variables from `.env.example`, especially `AGENT_WEBHOOK_SECRET`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `DEFAULT_PARENT_DRIVE_FOLDER_ID`, and `GOOGLE_DRIVE_ACCESS_TOKEN`.
 
 ## Setup steps
 

@@ -1,1 +1,220 @@
-{"name":"parse_and_summarise_documents","nodes":[{"id":"1","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":1,"position":[0,0],"parameters":{"path":"v1/parse_and_summarise_documents","httpMethod":"POST","responseMode":"responseNode"}},{"id":"2","name":"Normalize Input","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0],"parameters":{"jsCode":"const body=$json.body??$json;const headers=$json.headers??{};const summarySql=String(body.summary||'').replace(/'/g,\"''\");const textSql=String(body.extracted_text||'').replace(/'/g,\"''\");return [{json:{...body,job_id:body.job_id||$json.job_id||'',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||'',summary_sql:summarySql,extracted_text_sql:textSql}}];"}},{"id":"3","name":"Check Secret","type":"n8n-nodes-base.if","typeVersion":1,"position":[440,0],"parameters":{"conditions":{"string":[{"value1":"={{$json.agent_secret}}","operation":"equal","value2":"={{$env.AGENT_WEBHOOK_SECRET}}"}]}}},{"id":"4","name":"Reject Unauthorized","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,-120],"parameters":{"respondWith":"json","responseBody":"={\"ok\":false,\"error\":\"unauthorized\"}","options":{"responseCode":401}}},{"id":"5","name":"Mark Documents","type":"n8n-nodes-base.postgres","typeVersion":1,"position":[660,0],"parameters":{"operation":"executeQuery","query":"=WITH updated AS (UPDATE content_assets SET parse_status=CASE WHEN mime_type ILIKE '%text%' OR mime_type ILIKE '%document%' OR file_name ILIKE '%.md' OR file_name ILIKE '%.txt' THEN 'parsed_metadata_only' ELSE 'unsupported' END, extracted_text=COALESCE(extracted_text,NULLIF('{{$json.extracted_text_sql}}','')), extracted_metadata=extracted_metadata || jsonb_build_object('parser_mode','credential_ready_metadata_or_payload','summary',NULLIF('{{$json.summary_sql}}','')), updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND (source_type IN ('document','drive_file','google_doc') OR mime_type ILIKE '%text%' OR mime_type ILIKE '%document%') RETURNING id), event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) SELECT NULLIF('{{$json.job_id}}','')::uuid,'documents_parsed','Document assets parsed/summarised where supported',jsonb_build_object('updated_assets',(SELECT count(*) FROM updated),'mode','metadata_or_payload')) SELECT count(*) AS updated_assets FROM updated;"}},{"id":"6","name":"Respond","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[900,0],"parameters":{"respondWith":"json","responseBody":"={\"ok\":true,\"workflow\":\"parse_and_summarise_documents\",\"updated_assets\":{{$json.updated_assets}}}","options":{"responseCode":200}}}],"connections":{"Webhook":{"main":[[{"node":"Normalize Input","type":"main","index":0}]]},"Normalize Input":{"main":[[{"node":"Check Secret","type":"main","index":0}]]},"Check Secret":{"main":[[{"node":"Mark Documents","type":"main","index":0}],[{"node":"Reject Unauthorized","type":"main","index":0}]]},"Mark Documents":{"main":[[{"node":"Respond","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"v1.0-rc-chatgpt-review-fix"}
+{
+  "name": "parse_and_summarise_documents",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/parse_and_summarise_documents",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body=$json.body??$json;const headers=$json.headers??{};const rawJobId=String(body.job_id||$json.job_id||'');const jobId=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawJobId)?rawJobId:'';return [{json:{...body,job_id:jobId,mode:body.mode||'live',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Reject Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id::text AS job_id, drive_root_folder_id FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Google Drive API Placeholder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.GOOGLE_DRIVE_ACCESS_TOKEN}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "7",
+      "name": "Record Drive Step",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$node[\"Load Job\"].json.job_id}}','')::uuid,'documents_parse_drive_step','Document parsing Drive step prepared',jsonb_build_object('credential','GOOGLE_DRIVE_AI_CONTENT','drive_node_present',true)) RETURNING id), output_insert AS (INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) SELECT NULLIF('{{$node[\"Load Job\"].json.job_id}}','')::uuid,'asset_index','Asset Index',COALESCE((SELECT jsonb_agg(jsonb_build_object('file_name',file_name,'mime_type',mime_type,'parse_status',parse_status)) FROM content_assets WHERE job_id=NULLIF('{{$node[\"Load Job\"].json.job_id}}','')::uuid),'[]'::jsonb),'pending' WHERE 'false'='true' RETURNING id) SELECT (SELECT id::text FROM event_insert) AS event_id,(SELECT id::text FROM output_insert) AS output_id;"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"workflow\":\"parse_and_summarise_documents\",\"event_id\":\"{{$json.event_id}}\",\"output_id\":\"{{$json.output_id || ''}}\"}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Google Drive API Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive API Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Record Drive Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Drive Step": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-pre-n8n-drive"
+}

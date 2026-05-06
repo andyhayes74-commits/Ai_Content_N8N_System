@@ -41,6 +41,7 @@ Use either OpenAI directly or LiteLLM. If using LiteLLM, set `LITELLM_BASE_URL` 
 |---|---|
 | n8n Google Drive credential marker | `GOOGLE_DRIVE_CREDENTIAL_ID` |
 | Parent folder for client jobs | `DEFAULT_PARENT_DRIVE_FOLDER_ID` |
+| Google Drive HTTP bearer token / OAuth access token | `GOOGLE_DRIVE_ACCESS_TOKEN` |
 
 ## Workflow groups
 

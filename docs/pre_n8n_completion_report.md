@@ -1,6 +1,6 @@
 # Pre-n8n Completion Report
 
-Status: PR review required. The required PR checks cover repository validation, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
+Status: transfer-ready repository baseline pending n8n credential configuration and sandbox execution. The required PR checks cover repository validation, generated workflow drift detection, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
 
 ## Completed in this branch
 
@@ -19,12 +19,16 @@ Status: PR review required. The required PR checks cover repository validation, 
 - Added full dry-run sandbox payload pack under `tests/payloads/`.
 - Added expected database checks in `tests/expected_db_checks.sql`.
 - Updated README to require clone-and-preflight import.
+- Committed regenerated live-ready LLM and Drive workflow JSON so direct repository transfer no longer imports stale/minimal generated workflows.
+- Added a workflow drift guard that fails validation/preflight when generators modify committed `workflows/` files.
+- Added UUID/scalar normalization hardening for webhook payload values used in SQL expressions.
+- Replaced Google Drive literal credential-marker bearer fallback with an explicit `GOOGLE_DRIVE_ACCESS_TOKEN` placeholder for runtime credential configuration.
 
 ## Live-mode workflow structure
 
 LLM workflows include Postgres context read, embedded task-specific prompt instructions, OpenAI/LiteLLM HTTP Request node, JSON response parsing, `content_outputs` persistence, `content_errors` failure logging, and explicit `mode='dry_run'` fallback path.
 
-Drive workflows include Google Drive REST HTTP Request node structure, folder creation structure, subfolder creation structure, file listing structure, delivery-pack upload structure, and Postgres event/output persistence.
+Drive workflows include Google Drive REST HTTP Request node structure, folder creation structure, subfolder creation structure, file listing structure, delivery-pack upload structure, explicit access-token configuration, and Postgres event/output persistence.
 
 ## Remaining live-only checks
 
