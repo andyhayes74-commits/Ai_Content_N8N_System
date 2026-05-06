@@ -1,1 +1,475 @@
-{"name":"generate_video_scripts","nodes":[{"id":"1","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":1,"position":[0,0],"parameters":{"path":"v1/generate_video_scripts","httpMethod":"POST","responseMode":"responseNode"}},{"id":"2","name":"Normalize Input","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0],"parameters":{"jsCode":"const body=$json.body??$json;const headers=$json.headers??{};const payload=body.generated_output||body.output||{mode:'credential_ready_dry_run',note:'Supply generated_output or wire LLM HTTP node before live use'};const payloadSql=JSON.stringify(payload).replace(/'/g,\"''\");return [{json:{...body,job_id:body.job_id||$json.job_id||\"\",agent_secret:headers[\"x-agent-secret\"]||headers[\"X-Agent-Secret\"]||\"\",payload_sql:payloadSql}}];"}},{"id":"3","name":"Check Secret","type":"n8n-nodes-base.if","typeVersion":1,"position":[440,0],"parameters":{"conditions":{"string":[{"value1":"={{$json.agent_secret}}","operation":"equal","value2":"={{$env.AGENT_WEBHOOK_SECRET}}"}]}}},{"id":"4","name":"Reject Unauthorized","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,-120],"parameters":{"respondWith":"json","responseBody":"={\"ok\":false,\"error\":\"unauthorized\"}","options":{"responseCode":401}}},{"id":"5","name":"Store Output","type":"n8n-nodes-base.postgres","typeVersion":1,"position":[660,0],"parameters":{"operation":"executeQuery","query":"=WITH gate AS (SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') AS allowed), output_insert AS (INSERT INTO content_outputs (job_id,output_type,title,structured_data,qa_status) SELECT NULLIF('{{$json.job_id}}','')::uuid,'video_scripts','Video Scripts','{{$json.payload_sql}}'::jsonb,'pending' FROM gate WHERE allowed RETURNING id), task_update AS (UPDATE content_tasks SET status=CASE WHEN (SELECT allowed FROM gate) THEN 'completed' ELSE 'blocked' END,updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND task_key='video_scripts'), event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) SELECT NULLIF('{{$json.job_id}}','')::uuid,'output_stored','Output stored: video_scripts',jsonb_build_object('allowed',(SELECT allowed FROM gate),'output_id',(SELECT id FROM output_insert)))) SELECT (SELECT allowed FROM gate) AS allowed, (SELECT id::text FROM output_insert) AS output_id;"}},{"id":"6","name":"Respond","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[900,0],"parameters":{"respondWith":"json","responseBody":"={\"ok\":{{$json.allowed}},\"workflow\":\"generate_video_scripts\",\"output_id\":\"{{$json.output_id || ''}}\"}","options":{"responseCode":200}}}],"connections":{"Webhook":{"main":[[{"node":"Normalize Input","type":"main","index":0}]]},"Normalize Input":{"main":[[{"node":"Check Secret","type":"main","index":0}]]},"Check Secret":{"main":[[{"node":"Store Output","type":"main","index":0}],[{"node":"Reject Unauthorized","type":"main","index":0}]]},"Store Output":{"main":[[{"node":"Respond","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"v1.0-rc-chatgpt-repair"}
+{
+  "name": "generate_video_scripts",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/generate_video_scripts",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body=$json.body??$json;\nconst headers=$json.headers??{};\nconst rawJobId=String(body.job_id||$json.job_id||'');\nconst jobId=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawJobId)?rawJobId:'';\nconst fallback=body.generated_output||body.output||body.request_analysis||body.content_plan||body.qa_report||{mode:'dry_run_fallback',note:'Explicit dry_run fallback payload was not supplied'};\nreturn [{json:{...body,job_id:jobId,mode:body.mode||'live',fallback_payload:fallback,agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Reject Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Load Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH job AS (\n  SELECT id, project_name, brief_text, requested_outputs, drive_root_folder_id\n  FROM content_jobs\n  WHERE id=NULLIF('{{$json.job_id}}','')::uuid\n), gate AS (\n  SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=(SELECT id FROM job) AND approval_stage='plan' AND decision='approved') AS is_allowed\n), assets AS (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object('file_name', file_name, 'mime_type', mime_type, 'parse_status', parse_status, 'metadata', extracted_metadata)), '[]'::jsonb) AS asset_summary\n  FROM content_assets WHERE job_id=(SELECT id FROM job)\n), outputs AS (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object('output_type', output_type, 'title', title, 'qa_status', qa_status, 'structured_data', structured_data) ORDER BY created_at), '[]'::jsonb) AS prior_outputs\n  FROM content_outputs WHERE job_id=(SELECT id FROM job)\n)\nSELECT (SELECT is_allowed FROM gate) AS allowed,\n       (SELECT id::text FROM job) AS job_id,\n       (SELECT project_name FROM job) AS project_name,\n       (SELECT brief_text FROM job) AS brief_text,\n       (SELECT requested_outputs::text FROM job) AS requested_outputs_json,\n       (SELECT asset_summary::text FROM assets) AS asset_summary_json,\n       (SELECT prior_outputs::text FROM outputs) AS prior_outputs_json;"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Is Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.allowed}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7",
+      "name": "Reject Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"workflow\":\"generate_video_scripts\",\"error\":\"approval_gate_blocked\"}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Is Dry Run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node[\"Normalize Input\"].json.mode}}",
+              "operation": "equal",
+              "value2": "dry_run"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9",
+      "name": "Build Dry Run Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const n=$node['Normalize Input'].json;\nconst ctx=$node['Load Context'].json;\nconst output=n.fallback_payload||{mode:'dry_run_fallback'};\nconst status=output.overall_status==='pass'?'passed':(output.overall_status==='fail'?'failed':'needs_human_review');\nconst outputSql=JSON.stringify(output).replace(/'/g,\"''\");\nreturn [{json:{job_id:ctx.job_id, output_sql:outputSql, body_markdown_sql:'', qa_status:status, source:'dry_run_fallback', is_error:false}}];"
+      }
+    },
+    {
+      "id": "10",
+      "name": "Build Model Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const ctx=$json;\nfunction safeJson(value, fallback) { try { return JSON.parse(value || ''); } catch (e) { return fallback; } }\nconst prompt = \"Generate short video scripts, shot lists, storyboard notes, and CapCut-ready edit notes. Return strict JSON with video_scripts array, shot_lists, storyboard_notes, edit_notes, assumptions, missing_information, and source_material_used.\";\nconst userPayload = {\n  workflow: 'generate_video_scripts',\n  output_type: 'video_scripts',\n  project_name: ctx.project_name,\n  brief_text: ctx.brief_text,\n  requested_outputs: safeJson(ctx.requested_outputs_json, []),\n  assets: safeJson(ctx.asset_summary_json, []),\n  prior_outputs: safeJson(ctx.prior_outputs_json, [])\n};\nreturn [{json:{...ctx,model_request:{model:$env.OPENAI_MODEL||'gpt-4o-mini',messages:[{role:'system',content:prompt},{role:'user',content:JSON.stringify(userPayload)}],temperature:0.2,response_format:{type:'json_object'}}}}];"
+      }
+    },
+    {
+      "id": "11",
+      "name": "Call OpenAI or LiteLLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1540,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.LITELLM_BASE_URL || 'https://api.openai.com/v1') + '/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.model_request)}}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "12",
+      "name": "Parse Model Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const ctx=$node['Load Context'].json;\nconst raw=$json;\nlet content=raw?.choices?.[0]?.message?.content||raw?.body?.choices?.[0]?.message?.content||'';\nlet parsed;\nlet isError=Boolean(raw.error||raw.message?.includes?.('error'));\ntry { parsed=typeof content==='string'&&content.trim()?JSON.parse(content):raw; } catch(e) { parsed={raw_text:content,parse_warning:'Model response was not valid JSON'}; }\nconst status=parsed.overall_status==='pass'?'passed':(parsed.overall_status==='fail'?'failed':'needs_human_review');\nconst outputSql=JSON.stringify(parsed).replace(/'/g,\"''\");\nreturn [{json:{job_id:ctx.job_id, output_sql:outputSql, body_markdown_sql:String(content||'').replace(/'/g,\"''\"), qa_status:status, source:'llm_http', is_error:isError, error_message:raw.error?.message||raw.message||''}}];"
+      }
+    },
+    {
+      "id": "13",
+      "name": "Model Call Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.is_error}}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "14",
+      "name": "Store Output",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        -60
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH output_insert AS (\n  INSERT INTO content_outputs (job_id, output_type, title, structured_data, body_markdown, qa_status)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'video_scripts', 'Video Scripts', '{{$json.output_sql}}'::jsonb, NULLIF('{{$json.body_markdown_sql}}',''), 'pending')\n  RETURNING id\n), task_update AS (\n  UPDATE content_tasks SET status='completed', output_payload='{{$json.output_sql}}'::jsonb, updated_at=now()\n  WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND task_key='video_scripts'\n  RETURNING id\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid,'output_stored','Output stored: video_scripts',jsonb_build_object('output_id',(SELECT id FROM output_insert),'source','{{$json.source}}')\n)\nSELECT (SELECT id::text FROM output_insert) AS output_id;"
+      }
+    },
+    {
+      "id": "15",
+      "name": "Store Model Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH err AS (\n  INSERT INTO content_errors (job_id,severity,error_code,error_message,recoverable,context)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid,'high','LLM_HTTP_ERROR',COALESCE(NULLIF('{{$json.error_message || \"\"}}',''),'LLM HTTP request failed'),true,jsonb_build_object('workflow','generate_video_scripts'))\n  RETURNING id\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid,'llm_error_logged','LLM error logged',jsonb_build_object('error_id',(SELECT id FROM err))\n)\nSELECT id::text AS error_id FROM err;"
+      }
+    },
+    {
+      "id": "16",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        -60
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"workflow\":\"generate_video_scripts\",\"output_id\":\"{{$json.output_id}}\"}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "17",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"workflow\":\"generate_video_scripts\",\"error_id\":\"{{$json.error_id}}\"}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Load Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Context": {
+      "main": [
+        [
+          {
+            "node": "Is Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Is Dry Run?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Dry Run?": {
+      "main": [
+        [
+          {
+            "node": "Build Dry Run Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Model Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dry Run Output": {
+      "main": [
+        [
+          {
+            "node": "Store Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Model Request": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI or LiteLLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI or LiteLLM": {
+      "main": [
+        [
+          {
+            "node": "Parse Model Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Model Response": {
+      "main": [
+        [
+          {
+            "node": "Model Call Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Model Call Failed?": {
+      "main": [
+        [
+          {
+            "node": "Store Model Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Output": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Model Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-pre-n8n-llm"
+}

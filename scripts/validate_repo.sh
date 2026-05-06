@@ -5,6 +5,7 @@ python scripts/build_llm_workflows.py >/dev/null
 python scripts/embed_llm_prompts.py >/dev/null
 python scripts/build_drive_workflows.py >/dev/null
 python scripts/fix_generated_n8n_expressions.py >/dev/null
+bash scripts/check_workflow_drift.sh >/dev/null
 
 required_workflows=(
 create_content_job register_existing_drive_folder create_new_drive_project_folder create_standard_folder_structure
@@ -127,7 +128,7 @@ if matches:
 print('secret scan ok')
 PY
 
-for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD GOOGLE_DRIVE_CREDENTIAL_ID DEFAULT_PARENT_DRIVE_FOLDER_ID AGENT_WEBHOOK_SECRET NOTIFICATION_WEBHOOK_URL OPENAI_MODEL LITELLM_API_KEY; do
+for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD GOOGLE_DRIVE_CREDENTIAL_ID DEFAULT_PARENT_DRIVE_FOLDER_ID GOOGLE_DRIVE_ACCESS_TOKEN AGENT_WEBHOOK_SECRET NOTIFICATION_WEBHOOK_URL OPENAI_API_KEY OPENAI_MODEL LITELLM_BASE_URL LITELLM_API_KEY; do
   rg -q "^${v}=" .env.example
 done
 

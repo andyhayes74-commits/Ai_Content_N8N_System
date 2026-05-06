@@ -98,9 +98,11 @@ Risk level: MEDIUM.
 
 # Repair Actions
 
+Status: implemented on the transfer-ready repair branch. Remaining caveats are runtime-only credential and sandbox execution checks.
+
 ## Phase 1 — Commit generated workflows
 
-Required:
+Implemented. Required:
 
 - regenerate all LLM workflows
 - regenerate all Drive workflows
@@ -116,7 +118,7 @@ The committed repository state becomes identical to the validated/preflight stat
 
 ## Phase 2 — Add workflow drift guard
 
-CI/preflight must fail if:
+Implemented through `scripts/check_workflow_drift.sh`. CI/preflight must fail if:
 
 ```bash
 python scripts/build_llm_workflows.py
@@ -139,7 +141,7 @@ This prevents silent workflow drift.
 
 ## Phase 3 — Documentation clarification
 
-README and operational docs must clearly distinguish:
+Implemented. README and operational docs must clearly distinguish:
 
 - committed workflow JSON
 - generated workflow JSON
@@ -158,9 +160,9 @@ not production-ready.
 
 ## Phase 4 — Runtime hardening follow-up
 
-Post-import hardening tasks:
+Partially implemented for repository-transfer hardening. Post-import hardening tasks:
 
-- safer SQL handling
+- further parameterized-query migration where practical inside n8n
 - stronger Google Drive credential handling
 - live OAuth validation
 - sandbox execution validation

@@ -1,12 +1,12 @@
 # AI Content n8n System
 
 **Version:** v1.0 RC pre-n8n transfer baseline  
-**Status:** GitHub-side completion hardening in review  
+**Status:** Transfer-ready repository baseline; awaiting n8n credential configuration and sandbox execution
 **Purpose:** modular n8n automation system for freelance AI content generation work.
 
 This repository contains a database-backed n8n workflow system for handling AI-assisted client content jobs. It accepts a client brief, registers supporting assets, creates request analysis, generates a content plan, routes content-output tasks, stores generated outputs, QA-checks results, prepares a delivery pack, and keeps a supervisor agent informed.
 
-This branch is intended to make the repo as complete as possible **before** anything is imported into Andy’s n8n server.
+This branch is intended to be transferred into Andy’s n8n server for credential attachment and sandbox execution. It is not production-approved until live n8n tests pass.
 
 ---
 
@@ -55,7 +55,7 @@ python scripts/pre_n8n_readiness_check.py
 bash scripts/n8n_import_preflight.sh
 ```
 
-The validation/preflight scripts regenerate the LLM and Drive workflows, embed LLM task prompts, then repair generated n8n expressions before checking/importing:
+The validation/preflight scripts regenerate the LLM and Drive workflows, embed LLM task prompts, repair generated n8n expressions, and then fail if those generated files drift from the committed `workflows/` JSON:
 
 ```bash
 python scripts/build_llm_workflows.py
@@ -64,7 +64,7 @@ python scripts/build_drive_workflows.py
 python scripts/fix_generated_n8n_expressions.py
 ```
 
-This avoids importing stale workflow JSON.
+The committed `workflows/` JSON is now expected to match the generated transfer baseline. Any generator drift must be committed before transfer/import.
 
 ---
 
@@ -117,6 +117,7 @@ POSTGRES_USER=ai_content_user
 POSTGRES_PASSWORD=CHANGE_ME
 GOOGLE_DRIVE_CREDENTIAL_ID=google-drive-credential-id
 DEFAULT_PARENT_DRIVE_FOLDER_ID=drive-parent-folder-id
+GOOGLE_DRIVE_ACCESS_TOKEN=CHANGE_ME
 OPENAI_API_KEY=CHANGE_ME
 OPENAI_MODEL=gpt-4o-mini
 LITELLM_BASE_URL=https://litellm.example.com/v1
@@ -158,9 +159,9 @@ python scripts/pre_n8n_readiness_check.py
 bash scripts/n8n_import_preflight.sh
 ```
 
-Checks include workflow syntax, required coverage, webhook auth coverage, malformed expression scan, sensitive-action policy scan, obvious secret scan, LLM node presence, embedded LLM prompt check, Drive node presence, approval gates, final delivery gate, and n8n CLI import shape.
+Checks include workflow syntax, required coverage, webhook auth coverage, generated-workflow drift detection, malformed expression scan, sensitive-action policy scan, obvious secret scan, LLM node presence, embedded LLM prompt check, Drive node presence, approval gates, final delivery gate, and n8n CLI import shape.
 
-This does **not** prove live credentials, but it should catch major GitHub-side build problems before n8n.
+This does **not** prove live credentials, but it should catch major GitHub-side build problems and stale generated-workflow drift before n8n transfer.
 
 ---
 

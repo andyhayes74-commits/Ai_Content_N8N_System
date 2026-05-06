@@ -8,7 +8,7 @@ WORKFLOWS = ROOT / 'workflows'
 ENV_EXAMPLE = ROOT / '.env.example'
 LLM_WORKFLOWS = ['analyse_client_request','generate_content_plan','generate_campaign_plan','generate_social_posts','generate_email_copy','generate_blog_article_copy','generate_image_prompts','generate_video_scripts','qa_check_outputs']
 DRIVE_WORKFLOWS = ['create_new_drive_project_folder','create_standard_folder_structure','scan_drive_assets','parse_and_summarise_documents','create_asset_index','generate_delivery_pack']
-REQUIRED_ENV = ['POSTGRES_HOST','POSTGRES_PORT','POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD','GOOGLE_DRIVE_CREDENTIAL_ID','DEFAULT_PARENT_DRIVE_FOLDER_ID','OPENAI_API_KEY','OPENAI_MODEL','LITELLM_BASE_URL','LITELLM_API_KEY','AGENT_WEBHOOK_SECRET','NOTIFICATION_WEBHOOK_URL']
+REQUIRED_ENV = ['POSTGRES_HOST','POSTGRES_PORT','POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD','GOOGLE_DRIVE_CREDENTIAL_ID','DEFAULT_PARENT_DRIVE_FOLDER_ID','GOOGLE_DRIVE_ACCESS_TOKEN','OPENAI_API_KEY','OPENAI_MODEL','LITELLM_BASE_URL','LITELLM_API_KEY','AGENT_WEBHOOK_SECRET','NOTIFICATION_WEBHOOK_URL']
 FORBIDDEN = re.compile(r'DELETE FROM|DROP TABLE|TRUNCATE|send final|client deliver|publish', re.I)
 SECRET_PATTERNS = re.compile(r'sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-')
 BAD_EXPR = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
@@ -19,6 +19,7 @@ def run_generators():
     subprocess.run([sys.executable, str(ROOT/'scripts/embed_llm_prompts.py')], check=True, stdout=subprocess.DEVNULL)
     subprocess.run([sys.executable, str(ROOT/'scripts/build_drive_workflows.py')], check=True, stdout=subprocess.DEVNULL)
     subprocess.run([sys.executable, str(ROOT/'scripts/fix_generated_n8n_expressions.py')], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['bash', str(ROOT/'scripts/check_workflow_drift.sh')], check=True, stdout=subprocess.DEVNULL)
 def load(name):
     p=WORKFLOWS/f'{name}.json'
     if not p.exists(): fail(f'Missing workflow: {p}'); return {},''

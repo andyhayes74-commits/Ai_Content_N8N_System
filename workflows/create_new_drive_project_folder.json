@@ -1,1 +1,251 @@
-{"name":"create_new_drive_project_folder","nodes":[{"id":"1","name":"Webhook","type":"n8n-nodes-base.webhook","typeVersion":1,"position":[0,0],"parameters":{"path":"v1/create_new_drive_project_folder","httpMethod":"POST","responseMode":"responseNode"}},{"id":"2","name":"Normalize Input","type":"n8n-nodes-base.code","typeVersion":2,"position":[220,0],"parameters":{"jsCode":"const body=$json.body??$json;const headers=$json.headers??{};return [{json:{...body,job_id:body.job_id||$json.job_id||'',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"}},{"id":"3","name":"Check Secret","type":"n8n-nodes-base.if","typeVersion":1,"position":[440,0],"parameters":{"conditions":{"string":[{"value1":"={{$json.agent_secret}}","operation":"equal","value2":"={{$env.AGENT_WEBHOOK_SECRET}}"}]}}},{"id":"4","name":"Reject Unauthorized","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[660,-120],"parameters":{"respondWith":"json","responseBody":"={\"ok\":false,\"error\":\"unauthorized\"}","options":{"responseCode":401}}},{"id":"5","name":"Prepare Folder Metadata","type":"n8n-nodes-base.postgres","typeVersion":1,"position":[660,0],"parameters":{"operation":"executeQuery","query":"=WITH job AS (SELECT j.id,j.project_name,COALESCE(c.client_name,'Client') AS client_name FROM content_jobs j LEFT JOIN client_profiles c ON c.id=j.client_profile_id WHERE j.id=NULLIF('{{$json.job_id}}','')::uuid), folder AS (SELECT id, regexp_replace(client_name || '_' || project_name || '_' || to_char(now(),'YYYY-MM-DD'),'[^A-Za-z0-9_-]+','_','g') AS folder_name, COALESCE(NULLIF('{{$json.drive_folder_id || \"\"}}',''),'PENDING_GOOGLE_DRIVE_CREATION') AS folder_id FROM job), update_job AS (UPDATE content_jobs SET drive_root_folder_id=(SELECT folder_id FROM folder), drive_root_folder_path=(SELECT folder_name FROM folder), updated_at=now() WHERE id=(SELECT id FROM job) RETURNING id), event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) SELECT id,'drive_project_folder_prepared','Project Drive folder metadata prepared',jsonb_build_object('folder_name',folder_name,'folder_id',folder_id,'credential','GOOGLE_DRIVE_AI_CONTENT','parent_env','DEFAULT_PARENT_DRIVE_FOLDER_ID') FROM folder) SELECT folder_id, folder_name FROM folder;"}},{"id":"6","name":"Respond","type":"n8n-nodes-base.respondToWebhook","typeVersion":1,"position":[900,0],"parameters":{"respondWith":"json","responseBody":"={\"ok\":true,\"workflow\":\"create_new_drive_project_folder\",\"folder_id\":\"{{$json.folder_id}}\",\"folder_name\":\"{{$json.folder_name}}\"}","options":{"responseCode":200}}}],"connections":{"Webhook":{"main":[[{"node":"Normalize Input","type":"main","index":0}]]},"Normalize Input":{"main":[[{"node":"Check Secret","type":"main","index":0}]]},"Check Secret":{"main":[[{"node":"Prepare Folder Metadata","type":"main","index":0}],[{"node":"Reject Unauthorized","type":"main","index":0}]]},"Prepare Folder Metadata":{"main":[[{"node":"Respond","type":"main","index":0}]]}},"active":false,"settings":{},"versionId":"v1.0-rc-chatgpt-repair"}
+{
+  "name": "create_new_drive_project_folder",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "v1/create_new_drive_project_folder",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const body=$json.body??$json;const headers=$json.headers??{};const rawJobId=String(body.job_id||$json.job_id||'');const jobId=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawJobId)?rawJobId:'';return [{json:{...body,job_id:jobId,mode:body.mode||'live',agent_secret:headers['x-agent-secret']||headers['X-Agent-Secret']||''}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.agent_secret}}",
+              "operation": "equal",
+              "value2": "={{$env.AGENT_WEBHOOK_SECRET}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Reject Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -180
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false,\"error\":\"unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Load Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT j.id::text AS job_id, regexp_replace(COALESCE(c.client_name,'Client') || '_' || j.project_name || '_' || to_char(now(),'YYYY-MM-DD'),'[^A-Za-z0-9_-]+','_','g') AS folder_name FROM content_jobs j LEFT JOIN client_profiles c ON c.id=j.client_profile_id WHERE j.id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Build Drive Folder Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{json:{...$json,drive_request:{name:$json.folder_name,mimeType:'application/vnd.google-apps.folder',parents:[$env.DEFAULT_PARENT_DRIVE_FOLDER_ID]},credential_marker:'GOOGLE_DRIVE_AI_CONTENT'}}];"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Create Folder in Google Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.GOOGLE_DRIVE_ACCESS_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.drive_request)}}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Register Drive Folder",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH update_job AS (UPDATE content_jobs SET drive_root_folder_id=COALESCE(NULLIF('{{$json.id || $json.drive_folder_id || \"\"}}',''),'PENDING_GOOGLE_DRIVE_CREATION'), drive_root_folder_path='{{$node[\"Load Job\"].json.folder_name}}', updated_at=now() WHERE id=NULLIF('{{$node[\"Load Job\"].json.job_id}}','')::uuid RETURNING id,drive_root_folder_id), event_insert AS (INSERT INTO content_events (job_id,event_type,message,metadata) SELECT id,'drive_project_folder_created','Project Drive folder created or prepared',jsonb_build_object('drive_root_folder_id',drive_root_folder_id,'credential','GOOGLE_DRIVE_AI_CONTENT') FROM update_job) SELECT id::text AS job_id, drive_root_folder_id FROM update_job;"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Load Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Job": {
+      "main": [
+        [
+          {
+            "node": "Build Drive Folder Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Drive Folder Request": {
+      "main": [
+        [
+          {
+            "node": "Create Folder in Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Folder in Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Register Drive Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register Drive Folder": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "v1.0-rc-pre-n8n-drive"
+}
