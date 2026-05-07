@@ -20,7 +20,7 @@
     },
     {
       "id": "2",
-      "name": "Normalize And Auth",
+      "name": "Authenticate And Plan Route",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
@@ -28,7 +28,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];\nreturn [{json:{...$json, lifecycle:['intake','drive_assets','request_analysis','analysis_approval_gate','content_planning','plan_approval_gate','content_generation','qa_delivery','final_approval_gate','delivery_pack'], dry_run:$json.mode==='dry_run'}}];"
+        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? $json;\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst action = body.action || 'run_lifecycle';\nconst routes = {\n  run_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  dry_run_full_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery'],\n  create_job: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  check_status: [],\n  list_active_jobs: [],\n  attach_drive_folder: ['tool_job_intake','tool_drive_assets'],\n  analyse_request: ['tool_request_analysis'],\n  generate_plan: ['tool_content_planning'],\n  generate_outputs: ['tool_content_generation'],\n  qa_delivery: ['tool_qa_delivery'],\n  log_progress: ['tool_logging'],\n  report_error: ['tool_logging'],\n  retry: ['tool_logging'],\n  pause: ['tool_logging'],\n  resume: ['tool_logging'],\n  cancel: ['tool_logging']\n};\nconst desired = routes[action] || routes.run_lifecycle;\nconst lifecycle = ['intake','drive_assets','request_analysis','analysis_approval_gate','content_planning','plan_approval_gate','content_generation','qa_delivery','final_approval_gate','delivery_pack'];\nreturn [{json: {...body, agent_secret: secret, action, mode: body.mode || 'dry_run', desired_tools: desired, lifecycle, current_stage: 'orchestrator_start', payload: body.payload || body, tool_results: [], status: 'orchestrating'}}];"
       }
     },
     {
@@ -51,7 +51,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -76,7 +82,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -101,7 +113,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -126,7 +144,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -151,7 +175,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -176,7 +206,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -201,7 +237,13 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
@@ -226,14 +268,14 @@
       "main": [
         [
           {
-            "node": "Normalize And Auth",
+            "node": "Authenticate And Plan Route",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize And Auth": {
+    "Authenticate And Plan Route": {
       "main": [
         [
           {
@@ -331,5 +373,5 @@
       "name": "operator-ready"
     }
   ],
-  "versionId": "operator-ready-v2"
+  "versionId": "operator-ready-v2-repaired"
 }

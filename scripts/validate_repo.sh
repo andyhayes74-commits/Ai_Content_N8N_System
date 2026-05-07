@@ -20,12 +20,13 @@ required_workflows=(
 for wf in "${required_workflows[@]}"; do
   test -f "${ACTIVE_DIR}/${wf}.json"
   python -m json.tool "${ACTIVE_DIR}/${wf}.json" >/dev/null
-  rg -q 'x-agent-secret|X-Agent-Secret' "${ACTIVE_DIR}/${wf}.json"
+  rg -q 'AGENT_WEBHOOK_SECRET' "${ACTIVE_DIR}/${wf}.json"
+  rg -q 'secret !== expected|secret === expected|expected !== secret|expected === secret' "${ACTIVE_DIR}/${wf}.json"
 done
 
 active_count=$(find "${ACTIVE_DIR}" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')
-if [ "$active_count" -gt 14 ]; then
-  echo "Too many active workflows: ${active_count}" >&2
+if [ "$active_count" -lt 8 ] || [ "$active_count" -gt 14 ]; then
+  echo "Active workflow count must be between 8 and 14; found ${active_count}" >&2
   exit 1
 fi
 
@@ -43,40 +44,17 @@ test -f docs/deployment_model.md
 test -f schemas/tool_registry.schema.json
 test -f examples/tool_registry.example.json
 
-python - <<'PY'
-import json, pathlib, re, sys
-root=pathlib.Path('workflows/active')
-required={'ai_content_orchestrator','tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery','tool_logging','api_supervisor_gateway'}
-found={p.stem for p in root.glob('*.json')}
-missing=required-found
-assert not missing, f'missing active workflows: {missing}'
-for p in root.glob('*.json'):
-    json.loads(p.read_text())
-orch=(root/'ai_content_orchestrator.json').read_text()
-for tool in ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery','tool_logging']:
-    assert tool in orch, f'orchestrator does not reference {tool}'
-text='\n'.join(p.read_text() for p in root.glob('*.json'))
-for table in ['content_jobs','content_assets','content_outputs','content_tasks','content_events','content_errors','content_approvals','client_profiles','job_messages']:
-    assert table in pathlib.Path('database/schema.sql').read_text(), f'missing schema table {table}'
-for stage in ['waiting_for_analysis_approval','waiting_for_plan_approval','waiting_for_human_review','final_delivery']:
-    assert stage in text, f'missing approval/status marker {stage}'
-assert "reviewer_type='human'" in text or "reviewer_type = 'human'" in text or "'human'" in (root/'tool_qa_delivery.json').read_text(), 'final approval is not human-gated'
-for status in ['created','intake_complete','assets_scanning','assets_parsed','analysis_complete','waiting_for_analysis_approval','waiting_for_plan_approval','generating_outputs','qa_in_progress','waiting_for_human_review','delivery_ready','completed','failed','paused','cancelled']:
-    assert status in pathlib.Path('docs/architecture.md').read_text(), f'status not documented: {status}'
-PY
+python scripts/static_workflow_audit.py >/dev/null
+python scripts/pre_n8n_readiness_check.py >/dev/null
 
 python - <<'PY'
-import re, sys
-from pathlib import Path
-bad = re.compile(r"\|\|\s*}}|(?<!\{)\{\$json|(?<!\{)\{\$env|(?<!\{)\{\$node|\$json\.body\.job_id\s*\|\||template action|NULLIF\('(?<!\{)\{\$json")
-fail=[]
-for p in Path('workflows/active').glob('*.json'):
-    text=p.read_text(errors='ignore')
-    if bad.search(text): fail.append(str(p))
-if fail:
-    print('Malformed expression or template-only action found:')
-    print('\n'.join(fail))
-    sys.exit(1)
+import pathlib
+sql=pathlib.Path('database/schema.sql').read_text()
+required=['content_jobs','content_assets','content_outputs','content_tasks','content_events','content_errors','content_approvals','client_profiles','job_messages']
+missing=[t for t in required if t not in sql]
+assert not missing, missing
+assert 'reviewer_type' in sql, 'content_approvals.reviewer_type missing'
+print('schema check ok')
 PY
 
 if rg -n "DELETE FROM|DROP TABLE|TRUNCATE|publish content|send final|final client deliverables|change credentials|modify database schema|edit n8n workflows directly" workflows/active/*.json -i; then
@@ -111,12 +89,22 @@ for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
   rg -q "^${v}=" .env.example
 done
 
-test -f tests/payloads/01_orchestrator_dry_run_job.json
-test -f tests/payloads/02_supervisor_status_check.json
-test -f tests/payloads/03_human_analysis_approval.json
-test -f tests/payloads/04_generation_route.json
-test -f tests/payloads/05_qa_delivery_route.json
-rg -q "workflows/active" scripts/n8n_import_preflight.sh
-rg -q "sandbox" tests/sandbox_test_plan.md
+for fixture in \
+  tests/payloads/01_orchestrator_dry_run_job.json \
+  tests/payloads/02_supervisor_status_check.json \
+  tests/payloads/03_human_analysis_approval.json \
+  tests/payloads/04_generation_route.json \
+  tests/payloads/05_qa_delivery_route.json; do
+  test -f "$fixture"
+done
+
+rg -q 'ACTIVE_DIR="workflows/active"' scripts/n8n_import_preflight.sh
+if rg -n 'n8n import:workflow.*--input=workflows/?($|\s)' scripts/n8n_import_preflight.sh; then
+  echo "Import preflight must not target workflows/ root" >&2
+  exit 1
+fi
+rg -q "GitHub is the source of truth" docs/deployment_model.md
+rg -q "n8n is the runtime" docs/deployment_model.md
+rg -q "No live n8n runtime" docs/pre_n8n_completion_report.md
 
 echo "validation ok"

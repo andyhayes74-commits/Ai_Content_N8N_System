@@ -36,3 +36,8 @@ Expected records:
 ## Live-mode follow-up
 
 After the dry-run path passes, repeat selected analysis, planning, generation, QA, and Drive actions in live mode using test-only assets and credentials.
+
+
+## Auth failure smoke test
+
+Before using valid credentials, send one request with a missing or incorrect `x-agent-secret`. The expected result is an unauthorized failure. A request with only a present-but-wrong secret must not be accepted.

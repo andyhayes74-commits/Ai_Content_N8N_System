@@ -28,7 +28,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers=$json.headers??{}; const body=$json.body??{}; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||''; if(!secret) throw new Error('Missing x-agent-secret'); const stage=body.approval_stage; if(!['analysis','plan','final_delivery'].includes(stage)) throw new Error('Invalid approval_stage'); return [{json:{...body,agent_secret:secret,reviewer_type:'human'}}];"
+        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst stage = body.approval_stage;\nif (!['analysis','plan','final_delivery'].includes(stage)) {\n  throw new Error('Invalid approval_stage');\n}\nreturn [{json: {...body, agent_secret: secret, reviewer_type: 'human'}}];"
       }
     },
     {
@@ -42,7 +42,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_approvals (job_id, approval_stage, decision, reviewer_id, reviewer_type, reviewer_notes)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, '{{$json.approval_stage}}', COALESCE('{{$json.decision}}','approved'), 'human:' || COALESCE('{{$json.reviewer_name}}','operator'), 'human', COALESCE('{{$json.notes}}',''));\nUPDATE content_jobs SET status=CASE WHEN '{{$json.approval_stage}}'='analysis' THEN 'analysis_complete'::job_status WHEN '{{$json.approval_stage}}'='plan' THEN 'generating_outputs'::job_status WHEN '{{$json.approval_stage}}'='final_delivery' THEN 'delivery_ready'::job_status ELSE status END, updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+        "query": "INSERT INTO content_approvals (job_id, approval_stage, decision, reviewer_id, reviewer_type, reviewer_notes)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, '{{$json.approval_stage}}', COALESCE('{{$json.decision}}','approved'), 'human:' || COALESCE('{{$json.reviewer_name}}','operator'), 'human', COALESCE('{{$json.notes}}',''));\nUPDATE content_jobs SET status=CASE WHEN '{{$json.approval_stage}}'='analysis' THEN 'analysis_complete'::job_status WHEN '{{$json.approval_stage}}'='plan' THEN 'generating_outputs'::job_status WHEN '{{$json.approval_stage}}'='final_delivery' THEN 'delivery_ready'::job_status ELSE status END, updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.approval_stage}}' AS approval_stage, COALESCE('{{$json.decision}}','approved') AS decision;"
       }
     },
     {
@@ -104,5 +104,5 @@
       "name": "operator-ready"
     }
   ],
-  "versionId": "operator-ready-v2"
+  "versionId": "operator-ready-v2-repaired"
 }

@@ -24,7 +24,40 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_content_planning';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+      }
+    },
+    {
+      "id": "run_gate",
+      "name": "Should Run Tool",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        330,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{!$json.skipped_tool}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "return_skipped",
+      "name": "Return Skipped Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        520,
+        260
+      ],
+      "parameters": {
+        "jsCode": "return [{json: $json}];"
       }
     },
     {
@@ -34,7 +67,7 @@
       "typeVersion": 1,
       "position": [
         440,
-        -80
+        -100
       ],
       "parameters": {
         "operation": "executeQuery",
@@ -43,7 +76,7 @@
     },
     {
       "id": "4",
-      "name": "LLM Content Plan",
+      "name": "Call OpenAI Or LiteLLM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
@@ -63,21 +96,61 @@
           ]
         },
         "sendBody": true,
-        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:'Generate approved-content plan only after analysis approval. Return strict JSON.'},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:\"Generate a content plan only if analysis approval exists. Return strict JSON with strategy, outputs, dependencies, assumptions, and risks.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
       }
     },
     {
       "id": "5",
-      "name": "Store Plan And Gate",
-      "type": "n8n-nodes-base.postgres",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         880,
         0
       ],
       "parameters": {
+        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.fallback_payload || state.content_plan || {mode: 'dry_run', workflow: state.current_stage, note: 'dry-run fallback output'};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true};\n  }\n}\nreturn [{json: {...state, content_plan: parsed, content_plan_json: JSON.stringify(parsed || {}), raw_model_text: rawText, parse_warning: parseWarning, warning_message: warningMessage, qa_status: 'pending'}}];"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Store Parse Warning",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -100
+      ],
+      "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'content_plan', 'Content plan', COALESCE('{{$json.content_plan}}','{}')::jsonb, 'pending');\nUPDATE content_jobs SET status='waiting_for_plan_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Content plan approval gate reached',jsonb_build_object('approval_stage','plan'));"
+        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'CONTENT_PLAN_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text}}', 2000), 'workflow', '{{$json.current_stage}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+      }
+    },
+    {
+      "id": "7",
+      "name": "Store Output And Gate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'content_plan', 'Content plan', COALESCE(NULLIF('{{$json.content_plan_json}}',''),'{}')::jsonb, 'pending');\nUPDATE content_jobs SET status='waiting_for_plan_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Content plan approval gate reached',jsonb_build_object('approval_stage','plan'));\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'waiting_for_plan_approval' AS status;"
+      }
+    },
+    {
+      "id": "8",
+      "name": "Return Tool Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Normalize And Auth'].json;\nconst current = $json;\nconst status = current.status || 'waiting_for_plan_approval';\nconst results = [...(base.tool_results || []), {tool: 'tool_content_planning', status, job_id: current.job_id || base.job_id || ''}];\nreturn [{json: {...base, ...current, job_id: current.job_id || base.job_id, status, tool_results: results, current_stage: 'tool_content_planning'}}];"
       }
     }
   ],
@@ -97,7 +170,25 @@
       "main": [
         [
           {
+            "node": "Should Run Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Run Tool": {
+      "main": [
+        [
+          {
             "node": "Require Analysis Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Skipped Tool",
             "type": "main",
             "index": 0
           }
@@ -108,18 +199,51 @@
       "main": [
         [
           {
-            "node": "LLM Content Plan",
+            "node": "Call OpenAI Or LiteLLM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "LLM Content Plan": {
+    "Call OpenAI Or LiteLLM": {
       "main": [
         [
           {
-            "node": "Store Plan And Gate",
+            "node": "Parse LLM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          {
+            "node": "Store Parse Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Parse Warning": {
+      "main": [
+        [
+          {
+            "node": "Store Output And Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Output And Gate": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
             "type": "main",
             "index": 0
           }
@@ -136,5 +260,5 @@
       "name": "operator-ready"
     }
   ],
-  "versionId": "operator-ready-v2"
+  "versionId": "operator-ready-v2-repaired"
 }

@@ -35,3 +35,8 @@ Use `tests/sandbox_test_plan.md` and the payloads in `tests/payloads/`.
 ## 6. Promote only after live sandbox checks
 
 Do not mark the system production-ready until n8n has executed Postgres, Drive, LLM, supervisor, and notification paths successfully with test data.
+
+
+## 7. PR #7 repaired validation focus
+
+The validation scripts now fail if active workflows only check for secret presence instead of comparing to `AGENT_WEBHOOK_SECRET`, if Code nodes contain likely unreachable top-level return patterns, if LLM-backed tools store outputs without parsing chat-completion responses, or if active imports target anything outside `workflows/active/`.

@@ -26,3 +26,15 @@ Core tables are preserved. A non-breaking migration adds `content_approvals.revi
 ## Not live-tested
 
 No live n8n runtime execution was performed in this repository change. Postgres credentials, Google Drive OAuth, OpenAI/LiteLLM calls, supervisor callbacks, and notification delivery still require sandbox testing.
+
+
+## Repair pass for PR #7 review blockers
+
+- Hardened webhook/callable auth so workflows compare the supplied secret with `AGENT_WEBHOOK_SECRET`.
+- Removed unreachable business logic after early returns in active Code nodes.
+- Made the orchestrator state-aware with action routing, selected tool lists, stage metadata, and accumulated `tool_results`.
+- Repaired content-generation dispatch for `campaign_plan`, `social_posts`, `email_copy`, `blog_article`, `image_prompts`, and `video_scripts`.
+- Added LLM response parsing before persistence for analysis, planning, generation, and QA/delivery tools, with parse warnings logged to `content_errors`.
+- Strengthened validation to catch weak auth, unreachable code, missing LLM parsing, missing dispatch types, missing approval gates, and accidental archive/root imports.
+
+No live n8n runtime or credentialed Postgres/Drive/LLM testing was performed during this repair pass.

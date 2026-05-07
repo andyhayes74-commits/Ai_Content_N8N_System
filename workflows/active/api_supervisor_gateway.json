@@ -28,7 +28,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers=$json.headers??{}; const body=$json.body??{}; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||''; if(!secret) throw new Error('Missing x-agent-secret'); const action=body.action||'check_status'; const forbidden=['delete_files','publish_content','send_final','change_credentials','modify_schema','edit_workflows','approve_final_delivery']; if(forbidden.includes(action)) throw new Error('Action requires human/operator path or is forbidden for agents'); return [{json:{...body,agent_secret:secret,allowed_actions:['create_job','submit_message','attach_drive_folder','check_status','list_active_jobs','progress_update','error_report','approve_analysis','approve_plan','request_revision','retry','pause','resume','cancel'],action}}];"
+        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst action = body.action || 'check_status';\nconst forbidden = ['delete_files','delete_file','publish_content','publish','send_final','send_final_client_deliverables','change_credentials','modify_schema','modify_database_schema','edit_workflows','edit_n8n_workflows','approve_analysis','approve_plan','approve_final_delivery'];\nif (forbidden.includes(action)) {\n  throw new Error('Action is forbidden for agents or requires the human review gateway');\n}\nreturn [{json: {...body, agent_secret: secret, action, allowed_actions: ['create_job','submit_message','attach_drive_folder','check_status','list_active_jobs','progress_update','error_report','request_revision','retry','pause','resume','cancel','generate_outputs','qa_delivery']}}];"
       }
     },
     {
@@ -51,38 +51,19 @@
             "job_id": "={{$json.job_id}}",
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
           }
         }
       }
     },
     {
       "id": "4",
-      "name": "Route To Logging",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1,
-      "position": [
-        440,
-        100
-      ],
-      "parameters": {
-        "workflowId": "tool_logging",
-        "options": {
-          "waitForSubWorkflow": true
-        },
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "job_id": "={{$json.job_id}}",
-            "action": "={{$json.action}}",
-            "mode": "={{$json.mode || 'dry_run'}}",
-            "payload": "={{$json}}"
-          }
-        }
-      }
-    },
-    {
-      "id": "5",
       "name": "Status Query",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 1,
@@ -96,7 +77,7 @@
       }
     },
     {
-      "id": "6",
+      "id": "5",
       "name": "Return Supervisor Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
@@ -137,17 +118,6 @@
       "main": [
         [
           {
-            "node": "Route To Logging",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Route To Logging": {
-      "main": [
-        [
-          {
             "node": "Status Query",
             "type": "main",
             "index": 0
@@ -176,5 +146,5 @@
       "name": "operator-ready"
     }
   ],
-  "versionId": "operator-ready-v2"
+  "versionId": "operator-ready-v2-repaired"
 }

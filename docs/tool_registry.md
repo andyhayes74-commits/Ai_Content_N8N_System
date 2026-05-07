@@ -12,9 +12,20 @@ All callable workflows accept JSON, require `x-agent-secret` when reached throug
 | `tool_content_generation` | Dispatch and generate campaign plans, social posts, email copy, blog/article copy, image prompts, and video scripts. | `{job_id, requested_outputs?, mode?, fallback_payload?}` | `{job_id, generated_outputs:[...]}` | `content_jobs`, `content_tasks`, `content_outputs`, `content_approvals`, `content_events`. | Postgres, OpenAI/LiteLLM. | Requires plan approval. | yes | no |
 | `tool_qa_delivery` | QA-check outputs, flag unsupported claims/missing information, open human review, and generate delivery pack after final approval. | `{job_id, mode?, final_approval?}` | `{job_id, status:waiting_for_human_review|delivery_ready, qa_report?, delivery_pack?}` | `content_jobs`, `content_outputs`, `content_approvals`, `content_events`, `content_errors`. | Postgres, OpenAI/LiteLLM, Google Drive. | Requires final human approval for delivery pack. | partial | no |
 | `tool_logging` | Log progress/errors and mark retry-safe failed steps. | `{job_id, event_type?, message?, error_code?, error_message?, retry_count?}` | `{job_id, retry_safe?, logged:true}` | `content_events`, `content_errors`. | Postgres. | none. | yes | no |
-| `api_supervisor_gateway` | External webhook/API entry for create job, submit message, attach Drive folder, status, active jobs, progress, errors, approvals except final, revisions, retry, pause, resume, cancel. | `{action, job_id?, payload?}` | `{ok, action, job_id?, status?}` | Routes to tools; may read `content_jobs`. | Postgres, inherited tool credentials. | Enforces agent boundaries; final approval blocked. | yes | no |
+| `api_supervisor_gateway` | External webhook/API entry for create job, submit message, attach Drive folder, status, active jobs, progress, errors, approval status handoff, revisions, retry, pause, resume, cancel; approval decisions route through the human gateway. | `{action, job_id?, payload?}` | `{ok, action, job_id?, status?}` | Routes to tools; may read `content_jobs`. | Postgres, inherited tool credentials. | Enforces agent boundaries; final approval blocked. | yes | no |
 | `api_human_review_gateway` | Human approval actions: analysis approval, plan approval, final delivery approval, revision requests. | `{job_id, approval_stage, decision, reviewer_name?, notes?}` | `{job_id, approval_stage, decision}` | `content_approvals`, `content_jobs`, `content_events`. | Postgres. | Human-only approval gate. | no | yes |
 
 ## Database note
 
 The core tables are preserved. A non-breaking migration adds `content_approvals.reviewer_type` so final approval can be queried explicitly as human approval.
+
+
+## Auth and response parsing requirements
+
+Every webhook/callable workflow that receives agent or operator input must compare `x-agent-secret` or the forwarded `agent_secret` with `AGENT_WEBHOOK_SECRET`. Presence-only auth is not valid.
+
+LLM-backed tools must parse OpenAI/LiteLLM chat-completion responses before storage. The expected path is `choices[0].message.content`; parsed JSON is stored in the workflow-specific `*_json` field, and parse warnings are logged to `content_errors`.
+
+## Orchestrator action routing
+
+`ai_content_orchestrator` passes `desired_tools`, `tool_results`, `current_stage`, `payload`, `status`, and error metadata to callable workflows. Tools that are not selected for an action return a skipped result instead of running the stage.

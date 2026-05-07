@@ -20,7 +20,7 @@ Active workflows live only in `workflows/active/`:
 9. `api_supervisor_gateway.json` — agent/supervisor API gateway for OpenClaw/Hermes/Julian-style callers.
 10. `api_human_review_gateway.json` — human approval and revision gateway.
 
-The old debug build is archived in `workflows/archive/v1_debug_build/` and should not be imported during normal operator setup.
+The old debug build is archived in `workflows/archive/v1_debug_build/` and should not be imported during normal operator setup. Every external webhook and callable tool now validates that `x-agent-secret` is present and equals `AGENT_WEBHOOK_SECRET`, not merely present.
 
 ## Lifecycle
 
@@ -39,7 +39,7 @@ api_supervisor_gateway or operator call
 → delivery_ready
 ```
 
-Postgres remains the source of truth for jobs, assets, outputs, tasks, events, errors, approvals, client profiles, and messages. Google Drive remains the workspace/file layer. GitHub remains the source of truth for workflow JSON; n8n is runtime only.
+Postgres remains the source of truth for jobs, assets, outputs, tasks, events, errors, approvals, client profiles, and messages. Google Drive remains the workspace/file layer. GitHub remains the source of truth for workflow JSON; n8n is runtime only. The orchestrator uses action-based routing (`create_job`, `generate_plan`, `generate_outputs`, `qa_delivery`, `dry_run_full_lifecycle`, and logging/retry actions) and carries `desired_tools`, `tool_results`, `current_stage`, `payload`, `status`, and error metadata between tool calls.
 
 ## Safety gates retained
 

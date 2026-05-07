@@ -25,6 +25,24 @@ The system now uses one main workflow plus nine callable workflows. The active i
 - `api_supervisor_gateway`: external agent/supervisor API entry point.
 - `api_human_review_gateway`: human-only approvals and revision decisions.
 
+
+## Orchestrator routing and state handoff
+
+The orchestrator authenticates against `AGENT_WEBHOOK_SECRET`, computes an action route, and passes forward `job_id`, `mode`, `action`, `payload`, `desired_tools`, `tool_results`, `current_stage`, `status`, and error metadata. Tool workflows no-op when they are not selected for the current action, so targeted actions do not run inappropriate lifecycle stages.
+
+Supported route groups:
+
+| Action | Tool sequence |
+|---|---|
+| `create_job` / `run_lifecycle` | intake, Drive assets, request analysis; then stop for analysis approval |
+| `dry_run_full_lifecycle` | dry-run operator path across all tools for sandbox validation |
+| `generate_plan` | content planning, guarded by analysis approval |
+| `generate_outputs` | content generation, guarded by plan approval |
+| `qa_delivery` | QA and delivery, guarded by final human approval before delivery-ready |
+| `log_progress`, `report_error`, `retry`, `pause`, `resume`, `cancel` | logging/retry-safe tracking |
+
+LLM tools parse OpenAI/LiteLLM `choices[0].message.content` before inserting rows into `content_outputs`. Parse warnings are recorded in `content_errors`.
+
 ## Preserved statuses
 
 The architecture preserves these statuses without replacement:
