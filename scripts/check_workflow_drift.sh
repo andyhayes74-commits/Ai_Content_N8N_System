@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "workflow drift check skipped: not inside a git work tree"
-  exit 0
-fi
-
-if ! git diff --quiet -- workflows/; then
-  echo "Workflow drift detected: generated workflow files differ from committed workflows." >&2
-  echo "Run the workflow generators, review workflows/, and commit the resulting JSON before transfer/import." >&2
-  echo "Generator sequence:" >&2
-  echo "  python scripts/build_llm_workflows.py" >&2
-  echo "  python scripts/embed_llm_prompts.py" >&2
-  echo "  python scripts/build_drive_workflows.py" >&2
-  echo "  python scripts/fix_generated_n8n_expressions.py" >&2
-  git diff --stat -- workflows/ >&2
+# Operator build workflows are authored in workflows/active and archived v1 workflows are immutable rollback references.
+# This check intentionally avoids regenerating archived debug workflows and verifies no generated root-level import drift exists.
+if find workflows -maxdepth 1 -type f -name '*.json' | rg -q '.json'; then
+  echo "Root workflow JSON drift found. Active imports must live in workflows/active; archived v1 JSON must live in workflows/archive/v1_debug_build." >&2
+  find workflows -maxdepth 1 -type f -name '*.json' >&2
   exit 1
 fi
-
-echo "workflow drift check ok"
+python - <<'PY'
+import json
+from pathlib import Path
+for p in Path('workflows/active').glob('*.json'):
+    json.loads(p.read_text())
+print('workflow drift check ok')
+PY

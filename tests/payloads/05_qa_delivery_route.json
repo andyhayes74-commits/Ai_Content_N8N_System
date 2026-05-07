@@ -1,0 +1,11 @@
+{
+  "action": "qa_delivery",
+  "mode": "dry_run",
+  "job_id": "00000000-0000-0000-0000-000000000000",
+  "qa_report": {
+    "overall_status": "needs_human_review",
+    "unsupported_claims": [],
+    "missing_information": [],
+    "human_review_required": true
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "name": "tool_job_intake",
+  "id": "tool_job_intake",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Create Or Update Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upsert_job AS (\nINSERT INTO content_jobs (external_job_ref, project_name, brief_text, requested_outputs, drive_root_folder_id, status, created_by)\nVALUES (NULLIF('{{$json.external_job_ref}}',''), COALESCE('{{$json.project_name}}','Untitled AI content job'), COALESCE('{{$json.brief_text}}',''), COALESCE(NULLIF('{{$json.requested_outputs}}',''),'[]')::jsonb, NULLIF('{{$json.drive_folder_id}}',''), 'intake_complete', COALESCE('{{$json.created_by}}','api_supervisor'))\nON CONFLICT (external_job_ref) DO UPDATE SET updated_at=now(), status='intake_complete', brief_text=EXCLUDED.brief_text RETURNING id, status\n), msg AS (\nINSERT INTO job_messages (job_id, sender_type, sender_id, message_type, message_text, attachments)\nSELECT id, 'agent', COALESCE('{{$json.sender_id}}','supervisor'), 'brief', COALESCE('{{$json.message}}','{{$json.brief_text}}',''), '[]'::jsonb FROM upsert_job RETURNING id\n), event AS (\nINSERT INTO content_events (job_id, event_type, message, metadata) SELECT id, 'intake_complete', 'Job intake completed', jsonb_build_object('operator_architecture','v2','dry_run',COALESCE('{{$json.mode}}','dry_run')) FROM upsert_job RETURNING id)\nSELECT id::text AS job_id, status::text AS status FROM upsert_job;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Return Intake Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{json:{...$json, tool:'tool_job_intake', status:$json.status||'intake_complete'}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Create Or Update Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Or Update Job": {
+      "main": [
+        [
+          {
+            "node": "Return Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}

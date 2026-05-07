@@ -1,25 +1,32 @@
-# v1.0 RC Release Checklist
+# Release Checklist
 
 ## Repository checks
-- [x] Required workflow files exist.
-- [x] Workflow files are valid JSON.
-- [x] Required Postgres tables exist in `database/schema.sql`.
-- [x] Validation scripts scan for malformed expressions and forbidden actions.
-- [x] Secrets are represented by placeholders only.
 
-## Functional sandbox checks still required in n8n
-- [ ] Import all workflows into n8n sandbox.
-- [ ] Configure Postgres credentials.
-- [ ] Run `create_content_job` with `examples/client_brief.json`.
-- [ ] Confirm rows appear in `content_jobs`, `content_tasks`, `content_events`.
-- [ ] Run analysis/plan/final approval gates.
-- [ ] Confirm outputs appear in `content_outputs`.
-- [ ] Confirm final delivery is blocked until `api_approve_final_delivery` with `reviewer_type='human'`.
-- [ ] Configure Google Drive and test folder/file operations.
-- [ ] Configure OpenAI/LiteLLM and test live model calls.
+- [ ] `bash scripts/validate_repo.sh`
+- [ ] `python scripts/static_workflow_audit.py`
+- [ ] `python scripts/pre_n8n_readiness_check.py`
+- [ ] `bash scripts/n8n_import_preflight.sh` in an environment with n8n CLI.
 
-## Not allowed
-- [ ] No autonomous publishing.
-- [ ] No final client sending.
-- [ ] No file deletion.
-- [ ] No credential/schema modification via supervisor API.
+## Import checks
+
+- [ ] Import only `workflows/active/`.
+- [ ] Confirm exactly 10 active operator workflows are present in n8n.
+- [ ] Confirm archived v1 debug workflows were not imported unless intentionally rolling back.
+
+## Sandbox checks
+
+- [ ] Run `tests/payloads/01_orchestrator_dry_run_job.json`.
+- [ ] Run supervisor status check.
+- [ ] Run analysis, plan, and final human approval paths.
+- [ ] Run one generation route.
+- [ ] Run QA/delivery route.
+- [ ] Execute `tests/expected_db_checks.sql`.
+
+## Production readiness
+
+- [ ] Postgres credential execution verified.
+- [ ] Google Drive OAuth actions verified with test folder.
+- [ ] OpenAI/LiteLLM responses verified.
+- [ ] Supervisor callbacks verified.
+- [ ] Notification delivery verified.
+- [ ] Human operator signs off final approval gate behavior.

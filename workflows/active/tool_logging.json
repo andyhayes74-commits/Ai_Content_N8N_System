@@ -1,0 +1,128 @@
+{
+  "name": "tool_logging",
+  "id": "tool_logging",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Log Progress Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.event_type}}','progress'), COALESCE('{{$json.message}}','Progress update'), COALESCE('{{$json.metadata}}','{}')::jsonb);"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.severity}}','warning'), COALESCE('{{$json.error_code}}','STEP_FAILED'), COALESCE('{{$json.error_message}}',''), true, jsonb_build_object('step_name',COALESCE('{{$json.step_name}}','unknown'),'retry_safe','retry_count < max_retries','retry_count',COALESCE('{{$json.retry_count}}','0')));"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Retry Safe Failed Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const retrySafe=Number($json.retry_count||0) < Number($json.max_retries||3); return [{json:{...$json, retry_safe:retrySafe, note:'retry_count < max_retries'}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Log Progress Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Progress Event": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Retry Safe Failed Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}

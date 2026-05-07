@@ -1,0 +1,115 @@
+{
+  "name": "tool_request_analysis",
+  "id": "tool_request_analysis",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "LLM Request Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:'Analyse request. Return strict JSON with facts, assumptions, missing_info, risk_flags.'},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Store Analysis And Gate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'request_analysis', 'Request analysis', COALESCE('{{$json.request_analysis}}','{}')::jsonb, 'pending');\nUPDATE content_jobs SET status='waiting_for_analysis_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Request analysis approval gate reached',jsonb_build_object('approval_stage','analysis'));"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "LLM Request Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Request Analysis": {
+      "main": [
+        [
+          {
+            "node": "Store Analysis And Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}

@@ -1,0 +1,140 @@
+{
+  "name": "tool_content_planning",
+  "id": "tool_content_planning",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Require Analysis Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='analysis' AND decision='approved') AS allowed;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "LLM Content Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:'Generate approved-content plan only after analysis approval. Return strict JSON.'},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Store Plan And Gate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'content_plan', 'Content plan', COALESCE('{{$json.content_plan}}','{}')::jsonb, 'pending');\nUPDATE content_jobs SET status='waiting_for_plan_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Content plan approval gate reached',jsonb_build_object('approval_stage','plan'));"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Require Analysis Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require Analysis Approval": {
+      "main": [
+        [
+          {
+            "node": "LLM Content Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Content Plan": {
+      "main": [
+        [
+          {
+            "node": "Store Plan And Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}

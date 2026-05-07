@@ -1,0 +1,164 @@
+{
+  "name": "tool_content_generation",
+  "id": "tool_content_generation",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];\nconst requested=$json.requested_outputs||['campaign_plan','social_posts','email_copy','blog_article','image_prompts','video_scripts']; const registry={campaign_plan:'Generate campaign plan',social_posts:'Generate social posts',email_copy:'Generate email copy',blog_article:'Generate blog/article copy',image_prompts:'Generate image prompts',video_scripts:'Generate video scripts'}; return requested.map(output_type=>({json:{...$json,output_type,dispatch_label:registry[output_type]||'Future extension tool'}}));"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Require Plan Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') AS allowed; UPDATE content_jobs SET status='generating_outputs' WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "LLM Generate Output",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:'Generate the routed content output. Do not publish. Return strict JSON.'},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Store Generated Output",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload, output_payload)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.output_type}}','future_tool'), COALESCE('{{$json.output_type}}','future_tool') || '-' || to_char(now(),'YYYYMMDDHH24MISSMS'), 'completed', jsonb_build_object('dispatch_pattern','add output_type mapping in tool_content_generation'), COALESCE('{{$json.generated_output}}','{}')::jsonb);\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.output_type}}','future_tool'), COALESCE('{{$json.dispatch_label}}','Generated output'), COALESCE('{{$json.generated_output}}','{}')::jsonb, 'pending');"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Return Generation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{json:{...$json, tool:'tool_content_generation', extensibility:['LinkedIn posts','YouTube scripts','Canva design generation','podcast episode assets','client proposal generation','SEO brief generation','image generation execution','CapCut packaging']}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Require Plan Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require Plan Approval": {
+      "main": [
+        [
+          {
+            "node": "LLM Generate Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Generate Output": {
+      "main": [
+        [
+          {
+            "node": "Store Generated Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Generated Output": {
+      "main": [
+        [
+          {
+            "node": "Return Generation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}

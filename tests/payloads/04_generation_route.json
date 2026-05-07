@@ -1,0 +1,12 @@
+{
+  "action": "generate_outputs",
+  "mode": "dry_run",
+  "job_id": "00000000-0000-0000-0000-000000000000",
+  "requested_outputs": ["social_posts"],
+  "generated_output": {
+    "output_type": "social_posts",
+    "items": [
+      {"channel": "linkedin", "copy": "Dry-run placeholder post for sandbox validation."}
+    ]
+  }
+}

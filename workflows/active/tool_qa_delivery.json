@@ -1,0 +1,193 @@
+{
+  "name": "tool_qa_delivery",
+  "id": "tool_qa_delivery",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers=$json.headers??{}; const body=$json.body??$json; const secret=headers['x-agent-secret']||headers['X-Agent-Secret']||body.agent_secret||''; if (!secret) { throw new Error('Missing x-agent-secret for callable workflow'); } return [{json:{...body,agent_secret:secret,mode:body.mode||'dry_run'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "QA Check Outputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:'QA outputs. Flag unsupported claims and missing information. Return JSON.'},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Store QA And Human Gate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_jobs SET status='qa_in_progress', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nUPDATE content_outputs SET qa_status='needs_human_review', updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND qa_status='pending';\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'qa_report', 'QA report', COALESCE('{{$json.qa_report}}','{}')::jsonb, 'needs_human_review');\nUPDATE content_jobs SET status='waiting_for_human_review', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Final delivery approval gate reached',jsonb_build_object('approval_stage','final_delivery','human_only',true));"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Require Final Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='final_delivery' AND decision='approved' AND reviewer_type='human') AS final_human_approved;"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Generate Delivery Pack Metadata",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "name": "={{'delivery-pack-' + $json.job_id + '.json'}}",
+        "parents": "={{$json.drive_root_folder_id || $env.DEFAULT_PARENT_DRIVE_FOLDER_ID}}",
+        "binaryData": false
+      }
+    },
+    {
+      "id": "7",
+      "name": "Mark Delivery Ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'delivery_pack', 'Human-approved delivery pack', jsonb_build_object('delivery_ready',true,'generated_after_human_approval',true), 'passed');\nUPDATE content_jobs SET status='delivery_ready', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "QA Check Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Check Outputs": {
+      "main": [
+        [
+          {
+            "node": "Store QA And Human Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store QA And Human Gate": {
+      "main": [
+        [
+          {
+            "node": "Require Final Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require Final Approval": {
+      "main": [
+        [
+          {
+            "node": "Generate Delivery Pack Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Delivery Pack Metadata": {
+      "main": [
+        [
+          {
+            "node": "Mark Delivery Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2"
+}
