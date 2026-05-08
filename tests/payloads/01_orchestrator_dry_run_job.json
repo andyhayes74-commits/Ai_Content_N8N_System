@@ -1,0 +1,9 @@
+{
+  "action": "create_job",
+  "mode": "dry_run",
+  "external_job_ref": "sandbox-operator-001",
+  "project_name": "Sandbox Operator Architecture Test",
+  "brief_text": "Create a dry-run content package for validating the orchestrator and callable tool workflow architecture.",
+  "requested_outputs": ["campaign_plan", "social_posts"],
+  "drive_folder_id": "dry-run-drive-folder"
+}

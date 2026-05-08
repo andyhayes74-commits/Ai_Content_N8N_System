@@ -1,49 +1,42 @@
 # Setup Guide
 
-This guide is for the pre-n8n transfer baseline.
-
-## Before import
-
-Run these from the repo root:
+## 1. Validate repository
 
 ```bash
 bash scripts/validate_repo.sh
 python scripts/static_workflow_audit.py
 python scripts/pre_n8n_readiness_check.py
+```
+
+## 2. Configure environment
+
+Copy `.env.example` to the deployment environment and set Postgres, Google Drive, OpenAI/LiteLLM, supervisor secret, and notification values. Do not commit real secrets.
+
+## 3. Import active workflows only
+
+```bash
 bash scripts/n8n_import_preflight.sh
 ```
 
-The validation/preflight scripts regenerate live-mode LLM and Drive workflow JSONs, then fail if the generated files differ from the committed transfer baseline:
+The script imports `workflows/active/` when the n8n CLI is installed. Archived v1 debug workflows are rollback references and are not imported by default.
 
-```bash
-python scripts/build_llm_workflows.py
-python scripts/embed_llm_prompts.py
-python scripts/build_drive_workflows.py
-python scripts/fix_generated_n8n_expressions.py
-```
+## 4. Attach credentials in n8n
 
-Do not import if the drift guard reports changes under `workflows/`; regenerate, review, and commit those files first.
+Attach credentials named in `docs/credential_mapping.md`:
 
-## Required credentials/config
+- `POSTGRES_AI_CONTENT_DB`
+- `GOOGLE_DRIVE_AI_CONTENT`
+- `HTTP_OPENAI_OR_LITELLM`
 
-- Postgres n8n credential: `POSTGRES_AI_CONTENT_DB`.
-- Google Drive OAuth/access-token configuration: `GOOGLE_DRIVE_ACCESS_TOKEN` plus the n8n credential marker `GOOGLE_DRIVE_AI_CONTENT`.
-- OpenAI/LiteLLM HTTP credential: `HTTP_OPENAI_OR_LITELLM`.
-- Environment variables from `.env.example`, especially `AGENT_WEBHOOK_SECRET`, `OPENAI_MODEL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `DEFAULT_PARENT_DRIVE_FOLDER_ID`, and `GOOGLE_DRIVE_ACCESS_TOKEN`.
+## 5. Run sandbox dry-run
 
-## Setup steps
+Use `tests/sandbox_test_plan.md` and the payloads in `tests/payloads/`.
 
-1. Copy `.env.example` to `.env` and fill placeholders.
-2. Provision Postgres.
-3. Run `database/schema.sql`, then `database/seed_reference.sql`.
-4. Run the preflight scripts above.
-5. Import workflows into an n8n sandbox instance using CLI/import folder flow.
-6. Attach the Postgres credential to Postgres nodes.
-7. Configure LLM credentials/env values.
-8. Configure Google Drive credentials/env values.
-9. Run `tests/sandbox_test_plan.md` using dry-run payloads first.
-10. After dry-run success, test live LLM calls and Drive actions with test-only data.
+## 6. Promote only after live sandbox checks
 
-## Safety reminder
+Do not mark the system production-ready until n8n has executed Postgres, Drive, LLM, supervisor, and notification paths successfully with test data.
 
-This system is designed around human review gates. Final client handoff remains outside autonomous workflow execution.
+
+## 7. PR #7 repaired validation focus
+
+The validation scripts now fail if active workflows only check for secret presence instead of comparing to `AGENT_WEBHOOK_SECRET`, if Code nodes contain likely unreachable top-level return patterns, if LLM-backed tools store outputs without parsing chat-completion responses, or if active imports target anything outside `workflows/active/`.

@@ -1,0 +1,7 @@
+{
+  "job_id": "00000000-0000-0000-0000-000000000000",
+  "approval_stage": "analysis",
+  "decision": "approved",
+  "reviewer_name": "sandbox_operator",
+  "notes": "Dry-run analysis approved for plan generation."
+}

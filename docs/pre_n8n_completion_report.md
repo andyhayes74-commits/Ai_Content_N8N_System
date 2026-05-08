@@ -1,51 +1,40 @@
 # Pre-n8n Completion Report
 
-Status: transfer-ready repository baseline pending n8n credential configuration and sandbox execution. The required PR checks cover repository validation, generated workflow drift detection, static audit, and pre-n8n readiness. The slower n8n CLI import preflight is available as a manual `workflow_dispatch` option because global n8n installation is heavy in GitHub Actions.
+## Refactor completed
 
-## Completed in this branch
+- Active workflows reduced from 40 debug workflows to 10 operator workflows.
+- Old workflow JSON archived in `workflows/archive/v1_debug_build/`.
+- Main orchestrator added at `workflows/active/ai_content_orchestrator.json`.
+- Callable tool workflows added for intake, Drive assets, request analysis, planning, generation, QA/delivery, logging, supervisor API, and human review.
+- Tool registry added in human-readable and machine-readable forms.
+- Validation and import scripts now target `workflows/active/` only.
 
-- Added pre-n8n validation, import-preflight, and GitHub Actions guardrails.
-- Updated GitHub Actions to Node 24-capable action versions: `actions/checkout@v6`, `actions/setup-python@v6`, and `actions/setup-node@v6`.
-- Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to the workflow environment for early Node 24 opt-in.
-- Fixed expression guardrails to avoid false positives on valid n8n expressions.
-- Added `scripts/build_llm_workflows.py` to deterministically generate LLM workflow JSONs.
-- Added `scripts/embed_llm_prompts.py` so generated LLM workflows carry embedded task-specific prompts rather than generic prompt-file pointers.
-- Added `scripts/build_drive_workflows.py` to deterministically generate Google Drive-ready workflow JSONs.
-- Added `scripts/fix_generated_n8n_expressions.py` to restore Python-collapsed n8n expression braces after generation.
-- Adjusted `validate_repo.sh` so generated workflow expression scanning no longer scans the checker scripts themselves.
-- Replaced silent `rg -q` marker checks with explicit Python marker checks so failures report the exact missing marker.
-- Narrowed the committed-secret scan so it scans repo content and generated workflows, not the scanner regex code itself.
-- Made the n8n CLI import preflight manual in GitHub Actions to avoid blocking PR checks on a slow global n8n install.
-- Added full dry-run sandbox payload pack under `tests/payloads/`.
-- Added expected database checks in `tests/expected_db_checks.sql`.
-- Updated README to require clone-and-preflight import.
-- Committed regenerated live-ready LLM and Drive workflow JSON so direct repository transfer no longer imports stale/minimal generated workflows.
-- Added a workflow drift guard that fails validation/preflight when generators modify committed `workflows/` files.
-- Added UUID/scalar normalization hardening for webhook payload values used in SQL expressions.
-- Replaced Google Drive literal credential-marker bearer fallback with an explicit `GOOGLE_DRIVE_ACCESS_TOKEN` placeholder for runtime credential configuration.
+## Safety retained
 
-## Live-mode workflow structure
+- Analysis approval gate.
+- Plan approval gate.
+- Final human delivery approval gate.
+- Agent safety boundaries.
+- Postgres source of truth.
+- Google Drive workspace layer.
+- Dry-run test payloads.
 
-LLM workflows include Postgres context read, embedded task-specific prompt instructions, OpenAI/LiteLLM HTTP Request node, JSON response parsing, `content_outputs` persistence, `content_errors` failure logging, and explicit `mode='dry_run'` fallback path.
+## Schema note
 
-Drive workflows include Google Drive REST HTTP Request node structure, folder creation structure, subfolder creation structure, file listing structure, delivery-pack upload structure, explicit access-token configuration, and Postgres event/output persistence.
+Core tables are preserved. A non-breaking migration adds `content_approvals.reviewer_type` so workflows can explicitly distinguish human approvals from agent events.
 
-## Remaining live-only checks
+## Not live-tested
 
-These cannot be fully confirmed until n8n has real credentials:
+No live n8n runtime execution was performed in this repository change. Postgres credentials, Google Drive OAuth, OpenAI/LiteLLM calls, supervisor callbacks, and notification delivery still require sandbox testing.
 
-- Postgres connection execution.
-- Google Drive OAuth folder/file operations.
-- OpenAI/LiteLLM model responses.
-- Notification webhook delivery.
-- OpenClaw/Hermes live callbacks.
 
-## Manual import preflight
+## Repair pass for PR #7 review blockers
 
-To run the heavier n8n CLI import check in GitHub Actions, trigger the `Pre-n8n readiness` workflow manually and choose `run_n8n_import=true`.
+- Hardened webhook/callable auth so workflows compare the supplied secret with `AGENT_WEBHOOK_SECRET`.
+- Removed unreachable business logic after early returns in active Code nodes.
+- Made the orchestrator state-aware with action routing, selected tool lists, stage metadata, and accumulated `tool_results`.
+- Repaired content-generation dispatch for `campaign_plan`, `social_posts`, `email_copy`, `blog_article`, `image_prompts`, and `video_scripts`.
+- Added LLM response parsing before persistence for analysis, planning, generation, and QA/delivery tools, with parse warnings logged to `content_errors`.
+- Strengthened validation to catch weak auth, unreachable code, missing LLM parsing, missing dispatch types, missing approval gates, and accidental archive/root imports.
 
-For local/server preflight, run:
-
-```bash
-bash scripts/n8n_import_preflight.sh
-```
+No live n8n runtime or credentialed Postgres/Drive/LLM testing was performed during this repair pass.

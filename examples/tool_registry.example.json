@@ -1,0 +1,28 @@
+{
+  "version": "v2-operator-ready",
+  "active_workflow_count": 10,
+  "tools": [
+    {
+      "workflow": "ai_content_orchestrator",
+      "purpose": "Coordinate complete job lifecycle and call reusable tool workflows.",
+      "input_contract": {"job_id": "uuid optional", "action": "string", "mode": "dry_run|live", "payload": "object"},
+      "output_contract": {"job_id": "uuid", "status": "job_status", "tool_results": "array"},
+      "tables_touched": ["content_events"],
+      "required_credentials": ["AGENT_WEBHOOK_SECRET"],
+      "approval_gates": ["analysis", "plan", "final_delivery"],
+      "agent_safe": true,
+      "human_only": false
+    },
+    {
+      "workflow": "api_human_review_gateway",
+      "purpose": "Record human decisions for analysis, plan, and final delivery approvals.",
+      "input_contract": {"job_id": "uuid", "approval_stage": "analysis|plan|final_delivery", "decision": "approved|revision_requested|rejected"},
+      "output_contract": {"job_id": "uuid", "approval_stage": "string", "decision": "string"},
+      "tables_touched": ["content_approvals", "content_jobs", "content_events"],
+      "required_credentials": ["POSTGRES_AI_CONTENT_DB", "AGENT_WEBHOOK_SECRET"],
+      "approval_gates": ["analysis", "plan", "final_delivery"],
+      "agent_safe": false,
+      "human_only": true
+    }
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "name": "tool_logging",
+  "id": "tool_logging",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_logging';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+      }
+    },
+    {
+      "id": "run_gate",
+      "name": "Should Run Tool",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        330,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{!$json.skipped_tool}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "return_skipped",
+      "name": "Return Skipped Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        520,
+        260
+      ],
+      "parameters": {
+        "jsCode": "return [{json: $json}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Log Progress Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.event_type}}','progress'), COALESCE('{{$json.message}}','Progress update'), COALESCE(NULLIF('{{$json.metadata_json}}',''),'{}')::jsonb); SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context) VALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.severity}}','warning'), COALESCE('{{$json.error_code}}','STEP_FAILED'), COALESCE('{{$json.error_message}}',''), true, jsonb_build_object('step_name',COALESCE('{{$json.step_name}}','unknown'),'retry_safe','retry_count < max_retries','retry_count',COALESCE('{{$json.retry_count}}','0'))); SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Retry Safe Failed Steps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Normalize And Auth'].json;\nconst retrySafe = Number(base.retry_count || 0) < Number(base.max_retries || 3);\nconst results = [...(base.tool_results || []), {tool: 'tool_logging', status: 'logged', retry_safe: retrySafe}];\nreturn [{json: {...base, ...$json, retry_safe: retrySafe, note: 'retry_count < max_retries', tool_results: results}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Should Run Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Run Tool": {
+      "main": [
+        [
+          {
+            "node": "Log Progress Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Skipped Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Progress Event": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Retry Safe Failed Steps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2-repaired"
+}

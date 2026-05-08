@@ -1,0 +1,377 @@
+{
+  "name": "ai_content_orchestrator",
+  "id": "ai_content_orchestrator",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Operator Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "v1/orchestrator",
+        "responseMode": "lastNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Authenticate And Plan Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? $json;\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst action = body.action || 'run_lifecycle';\nconst routes = {\n  run_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  dry_run_full_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery'],\n  create_job: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  check_status: [],\n  list_active_jobs: [],\n  attach_drive_folder: ['tool_job_intake','tool_drive_assets'],\n  analyse_request: ['tool_request_analysis'],\n  generate_plan: ['tool_content_planning'],\n  generate_outputs: ['tool_content_generation'],\n  qa_delivery: ['tool_qa_delivery'],\n  log_progress: ['tool_logging'],\n  report_error: ['tool_logging'],\n  retry: ['tool_logging'],\n  pause: ['tool_logging'],\n  resume: ['tool_logging'],\n  cancel: ['tool_logging']\n};\nconst desired = routes[action] || routes.run_lifecycle;\nconst lifecycle = ['intake','drive_assets','request_analysis','analysis_approval_gate','content_planning','plan_approval_gate','content_generation','qa_delivery','final_approval_gate','delivery_pack'];\nreturn [{json: {...body, agent_secret: secret, action, mode: body.mode || 'dry_run', desired_tools: desired, lifecycle, current_stage: 'orchestrator_start', payload: body.payload || body, tool_results: [], status: 'orchestrating'}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Call tool_job_intake",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_job_intake",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Call tool_drive_assets",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_drive_assets",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Call tool_request_analysis",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_request_analysis",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Call tool_content_planning",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_content_planning",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "7",
+      "name": "Call tool_content_generation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_content_generation",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Call tool_qa_delivery",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_qa_delivery",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "9",
+      "name": "Call tool_logging",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "workflowId": "tool_logging",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "10",
+      "name": "Return Lifecycle Status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Operator Webhook": {
+      "main": [
+        [
+          {
+            "node": "Authenticate And Plan Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate And Plan Route": {
+      "main": [
+        [
+          {
+            "node": "Call tool_job_intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_job_intake": {
+      "main": [
+        [
+          {
+            "node": "Call tool_drive_assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_drive_assets": {
+      "main": [
+        [
+          {
+            "node": "Call tool_request_analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_request_analysis": {
+      "main": [
+        [
+          {
+            "node": "Call tool_content_planning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_content_planning": {
+      "main": [
+        [
+          {
+            "node": "Call tool_content_generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_content_generation": {
+      "main": [
+        [
+          {
+            "node": "Call tool_qa_delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_qa_delivery": {
+      "main": [
+        [
+          {
+            "node": "Call tool_logging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call tool_logging": {
+      "main": [
+        [
+          {
+            "node": "Return Lifecycle Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2-repaired"
+}

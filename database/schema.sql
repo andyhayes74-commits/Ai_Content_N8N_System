@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS content_approvals (
   approval_stage TEXT NOT NULL,
   decision TEXT NOT NULL,
   reviewer_id TEXT NOT NULL,
+  reviewer_type TEXT NOT NULL DEFAULT 'human',
   reviewer_notes TEXT,
   decided_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

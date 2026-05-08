@@ -1,8 +1,6 @@
 # Credential Mapping
 
-This document lists the credentials/config values required after importing the workflows into n8n.
-
-## Global config
+## Environment/config placeholders
 
 | Purpose | Placeholder/config |
 |---|---|
@@ -11,47 +9,37 @@ This document lists the credentials/config values required after importing the w
 | Postgres DB | `POSTGRES_DB` |
 | Postgres user | `POSTGRES_USER` |
 | Postgres password | `POSTGRES_PASSWORD` |
-| n8n base URL | `N8N_BASE_URL` |
-| n8n API key | `N8N_API_KEY` |
-| Agent webhook auth | `AGENT_WEBHOOK_SECRET` |
-| Notification target | `NOTIFICATION_WEBHOOK_URL` |
-
-## n8n credentials
-
-| Area | Suggested n8n credential name |
-|---|---|
-| Postgres | `POSTGRES_AI_CONTENT_DB` |
-| Google Drive | `GOOGLE_DRIVE_AI_CONTENT` |
-| OpenAI/LiteLLM HTTP | `HTTP_OPENAI_OR_LITELLM` |
-
-## LLM config
-
-| Purpose | Placeholder/config |
-|---|---|
+| n8n base URL for future API deployment | `N8N_BASE_URL` |
+| n8n API key for future API deployment | `N8N_API_KEY` |
+| Google Drive credential marker | `GOOGLE_DRIVE_CREDENTIAL_ID` |
+| Default parent Drive folder | `DEFAULT_PARENT_DRIVE_FOLDER_ID` |
+| Google Drive access token for HTTP fallback | `GOOGLE_DRIVE_ACCESS_TOKEN` |
 | OpenAI key | `OPENAI_API_KEY` |
-| OpenAI model | `OPENAI_MODEL` |
-| LiteLLM base URL | `LITELLM_BASE_URL` |
-| LiteLLM API key | `LITELLM_API_KEY` |
+| OpenAI/LiteLLM model | `OPENAI_MODEL` |
+| LiteLLM OpenAI-compatible base URL | `LITELLM_BASE_URL` |
+| LiteLLM key | `LITELLM_API_KEY` |
+| Agent/supervisor webhook secret | `AGENT_WEBHOOK_SECRET` |
+| Human/operator notification target | `NOTIFICATION_WEBHOOK_URL` |
 
-Use either OpenAI directly or LiteLLM. If using LiteLLM, set `LITELLM_BASE_URL` to the OpenAI-compatible `/v1` base URL.
+## Suggested n8n credentials
 
-## Google Drive config
+| Area | Suggested n8n credential name | Used by |
+|---|---|---|
+| Postgres | `POSTGRES_AI_CONTENT_DB` | all tool workflows and gateways |
+| Google Drive | `GOOGLE_DRIVE_AI_CONTENT` | `tool_drive_assets`, `tool_qa_delivery` |
+| OpenAI/LiteLLM HTTP | `HTTP_OPENAI_OR_LITELLM` | analysis, planning, generation, QA |
 
-| Purpose | Placeholder/config |
-|---|---|
-| n8n Google Drive credential marker | `GOOGLE_DRIVE_CREDENTIAL_ID` |
-| Parent folder for client jobs | `DEFAULT_PARENT_DRIVE_FOLDER_ID` |
-| Google Drive HTTP bearer token / OAuth access token | `GOOGLE_DRIVE_ACCESS_TOKEN` |
+## Workflow credential needs
 
-## Workflow groups
-
-| Workflow group | Postgres | LLM | Google Drive | Agent secret |
+| Workflow | Postgres | LLM | Google Drive | Agent secret |
 |---|---:|---:|---:|---:|
-| Job creation | yes | no | no | yes |
-| Asset registration/index | yes | optional | yes for live Drive | yes |
-| Request analysis | yes | yes | no | yes |
-| Content plan | yes | yes | no | yes |
-| Output generation | yes | yes | no | yes |
-| QA | yes | yes | no | yes |
-| Delivery pack | yes | optional | yes for saving files | yes |
-| Supervisor APIs | yes | no | optional | yes |
+| `ai_content_orchestrator` | via tools | via tools | via tools | yes |
+| `tool_job_intake` | yes | no | no | yes |
+| `tool_drive_assets` | yes | optional | yes | yes |
+| `tool_request_analysis` | yes | yes | no | yes |
+| `tool_content_planning` | yes | yes | no | yes |
+| `tool_content_generation` | yes | yes | no | yes |
+| `tool_qa_delivery` | yes | yes | yes | yes |
+| `tool_logging` | yes | no | no | yes |
+| `api_supervisor_gateway` | yes | routed | routed | yes |
+| `api_human_review_gateway` | yes | no | no | yes |

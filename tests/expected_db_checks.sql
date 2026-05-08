@@ -1,10 +1,15 @@
 -- Replace :job_id with the sandbox job UUID before running.
 
-SELECT id, project_name, status
+SELECT id, project_name, status, human_approval_required
 FROM content_jobs
 WHERE id = :'job_id'::uuid;
 
-SELECT task_key, status, retry_count
+SELECT source_type, file_name, parse_status
+FROM content_assets
+WHERE job_id = :'job_id'::uuid
+ORDER BY created_at;
+
+SELECT task_type, task_key, status, retry_count, max_retries
 FROM content_tasks
 WHERE job_id = :'job_id'::uuid
 ORDER BY created_at;
@@ -14,12 +19,12 @@ FROM content_outputs
 WHERE job_id = :'job_id'::uuid
 ORDER BY created_at;
 
-SELECT approval_stage, decision, reviewer_id, decided_at
+SELECT approval_stage, decision, reviewer_id, reviewer_type, decided_at
 FROM content_approvals
 WHERE job_id = :'job_id'::uuid
 ORDER BY decided_at;
 
-SELECT event_type, message, created_at
+SELECT event_type, message, metadata, created_at
 FROM content_events
 WHERE job_id = :'job_id'::uuid
 ORDER BY created_at;
@@ -29,16 +34,22 @@ FROM content_errors
 WHERE job_id = :'job_id'::uuid
 ORDER BY created_at;
 
--- Expected final checks after a full dry-run path:
+-- Expected final checks after a full operator dry-run path:
 SELECT COUNT(*) >= 1 AS has_job
 FROM content_jobs
 WHERE id = :'job_id'::uuid;
 
-SELECT COUNT(*) >= 3 AS has_approval_gates
+SELECT COUNT(*) >= 3 AS has_human_approval_gates
 FROM content_approvals
 WHERE job_id = :'job_id'::uuid
   AND approval_stage IN ('analysis', 'plan', 'final_delivery')
-  AND decision = 'approved';
+  AND decision = 'approved'
+  AND reviewer_type = 'human';
+
+SELECT COUNT(*) >= 1 AS has_generation_task
+FROM content_tasks
+WHERE job_id = :'job_id'::uuid
+  AND status = 'completed';
 
 SELECT COUNT(*) >= 1 AS has_delivery_pack
 FROM content_outputs

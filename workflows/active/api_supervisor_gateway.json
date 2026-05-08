@@ -1,0 +1,150 @@
+{
+  "name": "api_supervisor_gateway",
+  "id": "api_supervisor_gateway",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Supervisor API Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "v1/supervisor",
+        "responseMode": "lastNode"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Enforce Agent Safety Boundaries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst action = body.action || 'check_status';\nconst forbidden = ['delete_files','delete_file','publish_content','publish','send_final','send_final_client_deliverables','change_credentials','modify_schema','modify_database_schema','edit_workflows','edit_n8n_workflows','approve_analysis','approve_plan','approve_final_delivery'];\nif (forbidden.includes(action)) {\n  throw new Error('Action is forbidden for agents or requires the human review gateway');\n}\nreturn [{json: {...body, agent_secret: secret, action, allowed_actions: ['create_job','submit_message','attach_drive_folder','check_status','list_active_jobs','progress_update','error_report','request_revision','retry','pause','resume','cancel','generate_outputs','qa_delivery']}}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Route To Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -80
+      ],
+      "parameters": {
+        "workflowId": "ai_content_orchestrator",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_id": "={{$json.job_id}}",
+            "action": "={{$json.action}}",
+            "mode": "={{$json.mode || 'dry_run'}}",
+            "payload": "={{$json}}",
+            "agent_secret": "={{$json.agent_secret}}",
+            "desired_tools": "={{$json.desired_tools}}",
+            "tool_results": "={{$json.tool_results}}",
+            "current_stage": "={{$json.current_stage}}",
+            "status": "={{$json.status}}",
+            "error": "={{$json.error}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Status Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id::text AS job_id, status::text, updated_at FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Return Supervisor Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Supervisor API Webhook": {
+      "main": [
+        [
+          {
+            "node": "Enforce Agent Safety Boundaries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce Agent Safety Boundaries": {
+      "main": [
+        [
+          {
+            "node": "Route To Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route To Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Status Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Query": {
+      "main": [
+        [
+          {
+            "node": "Return Supervisor Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2-repaired"
+}

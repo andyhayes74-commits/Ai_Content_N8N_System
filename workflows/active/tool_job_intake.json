@@ -1,0 +1,154 @@
+{
+  "name": "tool_job_intake",
+  "id": "tool_job_intake",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Callable Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Normalize And Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_job_intake';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+      }
+    },
+    {
+      "id": "run_gate",
+      "name": "Should Run Tool",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        330,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{!$json.skipped_tool}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "return_skipped",
+      "name": "Return Skipped Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        520,
+        260
+      ],
+      "parameters": {
+        "jsCode": "return [{json: $json}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Create Or Update Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upsert_job AS (\nINSERT INTO content_jobs (external_job_ref, project_name, brief_text, requested_outputs, drive_root_folder_id, status, created_by)\nVALUES (NULLIF('{{$json.external_job_ref}}',''), COALESCE('{{$json.project_name}}','Untitled AI content job'), COALESCE('{{$json.brief_text}}',''), COALESCE(NULLIF('{{$json.requested_outputs_json || JSON.stringify($json.requested_outputs || [])}}',''),'[]')::jsonb, NULLIF('{{$json.drive_folder_id}}',''), 'intake_complete', COALESCE('{{$json.created_by}}','api_supervisor'))\nON CONFLICT (external_job_ref) DO UPDATE SET updated_at=now(), status='intake_complete', brief_text=EXCLUDED.brief_text RETURNING id, status\n), msg AS (\nINSERT INTO job_messages (job_id, sender_type, sender_id, message_type, message_text, attachments)\nSELECT id, 'agent', COALESCE('{{$json.sender_id}}','supervisor'), 'brief', COALESCE('{{$json.message}}','{{$json.brief_text}}',''), '[]'::jsonb FROM upsert_job RETURNING id\n), event AS (\nINSERT INTO content_events (job_id, event_type, message, metadata) SELECT id, 'intake_complete', 'Job intake completed', jsonb_build_object('operator_architecture','v2','dry_run',COALESCE('{{$json.mode}}','dry_run')) FROM upsert_job RETURNING id)\nSELECT id::text AS job_id, status::text AS status FROM upsert_job;"
+      }
+    },
+    {
+      "id": "4",
+      "name": "Return Intake Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Normalize And Auth'].json;\nconst current = $json;\nconst status = current.status || 'intake_complete';\nconst results = [...(base.tool_results || []), {tool: 'tool_job_intake', status, job_id: current.job_id || base.job_id || ''}];\nreturn [{json: {...base, ...current, job_id: current.job_id || base.job_id, status, tool_results: results, current_stage: 'tool_job_intake'}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Callable Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize And Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize And Auth": {
+      "main": [
+        [
+          {
+            "node": "Should Run Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Run Tool": {
+      "main": [
+        [
+          {
+            "node": "Create Or Update Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Skipped Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Or Update Job": {
+      "main": [
+        [
+          {
+            "node": "Return Intake Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "operator-ready"
+    }
+  ],
+  "versionId": "operator-ready-v2-repaired"
+}

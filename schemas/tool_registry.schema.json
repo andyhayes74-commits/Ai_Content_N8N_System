@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Content Tool Registry",
+  "type": "object",
+  "required": ["version", "active_workflow_count", "tools"],
+  "properties": {
+    "version": {"type": "string"},
+    "active_workflow_count": {"type": "integer", "minimum": 1, "maximum": 14},
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["workflow", "purpose", "input_contract", "output_contract", "tables_touched", "required_credentials", "approval_gates", "agent_safe", "human_only"],
+        "properties": {
+          "workflow": {"type": "string"},
+          "purpose": {"type": "string"},
+          "input_contract": {"type": "object"},
+          "output_contract": {"type": "object"},
+          "tables_touched": {"type": "array", "items": {"type": "string"}},
+          "required_credentials": {"type": "array", "items": {"type": "string"}},
+          "approval_gates": {"type": "array", "items": {"type": "string"}},
+          "agent_safe": {"type": "boolean"},
+          "human_only": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
