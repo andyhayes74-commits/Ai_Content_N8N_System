@@ -174,7 +174,7 @@
         "binaryData": false
       },
       "credentials": {
-        "googleDriveOAuth2Api": {
+        "googleApi": {
           "id": "GOOGLE_DRIVE_AI_CONTENT",
           "name": "GOOGLE_DRIVE_AI_CONTENT"
         }

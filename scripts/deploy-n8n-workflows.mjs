@@ -273,6 +273,33 @@ function applyCredentialIds(payload, credentials) {
   };
 }
 
+function applyExecuteWorkflowIds(payload, workflowIdMap) {
+  let updated = 0;
+  const missing = new Set();
+
+  for (const node of payload.nodes) {
+    if (node.type !== 'n8n-nodes-base.executeWorkflow') {
+      continue;
+    }
+
+    const workflowRef = node.parameters?.workflowId;
+    if (typeof workflowRef !== 'string' || !workflowRef) {
+      continue;
+    }
+
+    const workflowId = String(workflowIdMap[workflowRef] || '').trim();
+    if (!workflowId) {
+      missing.add(workflowRef);
+      continue;
+    }
+
+    node.parameters.workflowId = workflowId;
+    updated += 1;
+  }
+
+  return { updated, missing: [...missing] };
+}
+
 function formatFailedRequest(method, result, secrets) {
   return `${method} update failed with HTTP ${result.response.status} ${result.response.statusText}: ${redactSecrets(
     result.text || JSON.stringify(result.data ?? ''),
@@ -353,6 +380,16 @@ async function main() {
     }
     if (credentialResolution.updated > 0) {
       console.log(`Resolved ${credentialResolution.updated} credential reference(s) for ${name}.`);
+    }
+
+    const workflowReferenceResolution = applyExecuteWorkflowIds(payload, workflowIdMap);
+    if (workflowReferenceResolution.missing.length > 0) {
+      throw new Error(
+        `Missing n8n workflow ID mapping for Execute Workflow reference(s) in ${name}: ${workflowReferenceResolution.missing.join(', ')}`,
+      );
+    }
+    if (workflowReferenceResolution.updated > 0) {
+      console.log(`Resolved ${workflowReferenceResolution.updated} workflow reference(s) for ${name}.`);
     }
 
     let existingWorkflow;

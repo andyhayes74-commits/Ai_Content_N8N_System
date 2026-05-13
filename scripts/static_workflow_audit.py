@@ -95,7 +95,9 @@ def assert_service_credentials(path: Path, data: dict) -> None:
             fail(f"{path.name} webhook {name!r} must use n8n header-auth credentials")
         if node_type == "n8n-nodes-base.postgres" and not has_credential(item, "postgres"):
             fail(f"{path.name} Postgres node {name!r} must declare POSTGRES_AI_CONTENT_DB credential")
-        if node_type == "n8n-nodes-base.googleDrive" and not has_credential(item, "googleDriveOAuth2Api"):
+        if node_type == "n8n-nodes-base.googleDrive" and not (
+            has_credential(item, "googleApi") or has_credential(item, "googleDriveOAuth2Api")
+        ):
             fail(f"{path.name} Drive node {name!r} must declare GOOGLE_DRIVE_AI_CONTENT credential")
         if node_type == "n8n-nodes-base.httpRequest":
             params = item.get("parameters", {})

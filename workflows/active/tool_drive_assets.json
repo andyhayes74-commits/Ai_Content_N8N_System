@@ -76,7 +76,7 @@
         "parents": "={{$json.default_parent_drive_folder_id || $json.drive_folder_id || \"\"}}"
       },
       "credentials": {
-        "googleDriveOAuth2Api": {
+        "googleApi": {
           "id": "GOOGLE_DRIVE_AI_CONTENT",
           "name": "GOOGLE_DRIVE_AI_CONTENT"
         }
