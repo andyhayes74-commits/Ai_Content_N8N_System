@@ -128,7 +128,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'CONTENT_PLAN_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+        "query": "WITH warning_insert AS (\n  INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'CONTENT_PLAN_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\n  WHERE COALESCE('{{$json.parse_warning}}','false') = 'true'\n  RETURNING id\n)\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.content_plan_json_sql}}' AS content_plan_json_sql;"
       },
       "credentials": {
         "postgres": {
