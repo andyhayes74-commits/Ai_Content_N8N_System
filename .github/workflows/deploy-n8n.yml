@@ -1,0 +1,67 @@
+name: Deploy active AI content workflows to n8n
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate only, do not deploy"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  push:
+    branches:
+      - main
+    paths:
+      - "workflows/active/**"
+      - "scripts/deploy-active-workflows.mjs"
+      - "scripts/validate_repo.sh"
+      - "scripts/static_workflow_audit.py"
+      - "scripts/pre_n8n_readiness_check.py"
+      - ".github/workflows/deploy-n8n.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Check deploy script syntax
+        run: node --check scripts/deploy-active-workflows.mjs
+
+      - name: Validate repository
+        run: bash scripts/validate_repo.sh
+
+      - name: Run static workflow audit
+        run: python scripts/static_workflow_audit.py
+
+      - name: Run pre-n8n readiness check
+        run: python scripts/pre_n8n_readiness_check.py
+
+      - name: Deploy active workflows to n8n
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          N8N_DEPLOY_ACTIVE: ${{ secrets.N8N_DEPLOY_ACTIVE }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+        run: node scripts/deploy-active-workflows.mjs
