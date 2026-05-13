@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_logging';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_logging';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live', payload_sql: JSON.stringify(normalized).replace(/'/g, \"''\")}}];"
       }
     },
     {
@@ -71,7 +71,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.event_type}}','progress'), COALESCE('{{$json.message}}','Progress update'), COALESCE(NULLIF('{{$json.metadata_json}}',''),'{}')::jsonb); SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+        "query": "WITH payload AS (SELECT '{{$json.payload_sql}}'::jsonb AS body)\nINSERT INTO content_events (job_id,event_type,message,metadata)\nSELECT NULLIF(body->>'job_id','')::uuid, COALESCE(NULLIF(body->>'event_type',''),'progress'), COALESCE(NULLIF(body->>'message',''),'Progress update'), COALESCE(body->'metadata','{}'::jsonb) FROM payload;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -85,7 +91,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context) VALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.severity}}','warning'), COALESCE('{{$json.error_code}}','STEP_FAILED'), COALESCE('{{$json.error_message}}',''), true, jsonb_build_object('step_name',COALESCE('{{$json.step_name}}','unknown'),'retry_safe','retry_count < max_retries','retry_count',COALESCE('{{$json.retry_count}}','0'))); SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+        "query": "WITH payload AS (SELECT '{{$json.payload_sql}}'::jsonb AS body)\nINSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF(body->>'job_id','')::uuid, COALESCE(NULLIF(body->>'severity',''),'warning'), COALESCE(NULLIF(body->>'error_code',''),'STEP_FAILED'), COALESCE(body->>'error_message',''), true, jsonb_build_object('step_name',COALESCE(NULLIF(body->>'step_name',''),'unknown'),'retry_safe','retry_count < max_retries','retry_count',COALESCE(NULLIF(body->>'retry_count',''),'0')) FROM payload;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'logged' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -170,10 +182,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

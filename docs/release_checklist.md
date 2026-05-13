@@ -3,15 +3,20 @@
 ## Repository checks
 
 - [ ] `bash scripts/validate_repo.sh`
-- [ ] `python scripts/static_workflow_audit.py`
-- [ ] `python scripts/pre_n8n_readiness_check.py`
+- [ ] `python3 scripts/static_workflow_audit.py`
+- [ ] `python3 scripts/pre_n8n_readiness_check.py`
 - [ ] `bash scripts/n8n_import_preflight.sh` in an environment with n8n CLI.
+- [ ] `node --check scripts/deploy-n8n-workflows.mjs`
+- [ ] `DRY_RUN=true node scripts/deploy-n8n-workflows.mjs`
 
 ## Import checks
 
 - [ ] Import only `workflows/active/`.
 - [ ] Confirm exactly 10 active operator workflows are present in n8n.
 - [ ] Confirm archived v1 debug workflows were not imported unless intentionally rolling back.
+- [ ] Add `N8N_BASE_URL`, `N8N_API_KEY`, and workflow ID mapping secrets in GitHub.
+- [ ] Run **Deploy AI Content workflows to n8n** with `dry_run=true`.
+- [ ] Run **Deploy AI Content workflows to n8n** with `dry_run=false`.
 
 ## Sandbox checks
 

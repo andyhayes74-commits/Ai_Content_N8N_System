@@ -1,0 +1,65 @@
+name: Deploy AI Content workflows to n8n
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate only, do not deploy"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check deploy script syntax
+        run: node --check scripts/deploy-n8n-workflows.mjs
+
+      - name: Validate repository
+        run: bash scripts/validate_repo.sh
+
+      - name: Validate workflow JSON files
+        run: |
+          for file in workflows/active/*.json; do
+            python3 -m json.tool "$file" > /dev/null
+          done
+
+      - name: Deploy workflows to n8n
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          N8N_WORKFLOW_ID_MAP: ${{ secrets.N8N_WORKFLOW_ID_MAP }}
+          N8N_WORKFLOW_ID_AI_CONTENT_ORCHESTRATOR: ${{ secrets.N8N_WORKFLOW_ID_AI_CONTENT_ORCHESTRATOR }}
+          N8N_WORKFLOW_ID_TOOL_JOB_INTAKE: ${{ secrets.N8N_WORKFLOW_ID_TOOL_JOB_INTAKE }}
+          N8N_WORKFLOW_ID_TOOL_DRIVE_ASSETS: ${{ secrets.N8N_WORKFLOW_ID_TOOL_DRIVE_ASSETS }}
+          N8N_WORKFLOW_ID_TOOL_REQUEST_ANALYSIS: ${{ secrets.N8N_WORKFLOW_ID_TOOL_REQUEST_ANALYSIS }}
+          N8N_WORKFLOW_ID_TOOL_CONTENT_PLANNING: ${{ secrets.N8N_WORKFLOW_ID_TOOL_CONTENT_PLANNING }}
+          N8N_WORKFLOW_ID_TOOL_CONTENT_GENERATION: ${{ secrets.N8N_WORKFLOW_ID_TOOL_CONTENT_GENERATION }}
+          N8N_WORKFLOW_ID_TOOL_QA_DELIVERY: ${{ secrets.N8N_WORKFLOW_ID_TOOL_QA_DELIVERY }}
+          N8N_WORKFLOW_ID_TOOL_LOGGING: ${{ secrets.N8N_WORKFLOW_ID_TOOL_LOGGING }}
+          N8N_WORKFLOW_ID_API_SUPERVISOR_GATEWAY: ${{ secrets.N8N_WORKFLOW_ID_API_SUPERVISOR_GATEWAY }}
+          N8N_WORKFLOW_ID_API_HUMAN_REVIEW_GATEWAY: ${{ secrets.N8N_WORKFLOW_ID_API_HUMAN_REVIEW_GATEWAY }}
+          N8N_DEPLOY_ACTIVE: ${{ secrets.N8N_DEPLOY_ACTIVE }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node scripts/deploy-n8n-workflows.mjs

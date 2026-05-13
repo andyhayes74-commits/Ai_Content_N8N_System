@@ -1,0 +1,21 @@
+{
+  "name": "api_supervisor_gateway",
+  "nodes": [
+    {
+      "id": "placeholder-trigger",
+      "name": "Placeholder Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

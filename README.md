@@ -20,7 +20,7 @@ Active workflows live only in `workflows/active/`:
 9. `api_supervisor_gateway.json` — agent/supervisor API gateway for OpenClaw/Hermes/Julian-style callers.
 10. `api_human_review_gateway.json` — human approval and revision gateway.
 
-The old debug build is archived in `workflows/archive/v1_debug_build/` and should not be imported during normal operator setup. Every external webhook and callable tool now validates that `x-agent-secret` is present and equals `AGENT_WEBHOOK_SECRET`, not merely present.
+The old debug build is archived in `workflows/archive/v1_debug_build/` and should not be imported during normal operator setup. Public webhook entry points use n8n header-auth credentials; callable tool workflows are reached only through n8n Execute Workflow nodes and do not carry repo-stored secrets.
 
 ## Lifecycle
 
@@ -62,6 +62,8 @@ bash scripts/n8n_import_preflight.sh
 
 `scripts/n8n_import_preflight.sh` targets `workflows/active/`. If the n8n CLI is unavailable, the script exits honestly after the repository-side checks.
 
+Secrets are not configured through env files in this repo. Attach n8n credentials after import.
+
 ## Documentation
 
 - `docs/architecture.md` — operator workflow architecture and status lifecycle.
@@ -69,6 +71,7 @@ bash scripts/n8n_import_preflight.sh
 - `schemas/tool_registry.schema.json` and `examples/tool_registry.example.json` — machine-readable registry contract.
 - `docs/deployment_model.md` — GitHub-to-n8n deployment model.
 - `docs/setup_guide.md` — setup/import sequence.
+- `docs/operator_manual.md` — operator usage guide for running jobs and approvals.
 - `docs/credential_mapping.md` — required credentials.
 - `docs/failure_recovery.md` — retry, pause, resume, and rollback guidance.
 - `tests/sandbox_test_plan.md` — first sandbox test path.

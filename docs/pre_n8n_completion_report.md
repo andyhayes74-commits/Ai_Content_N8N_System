@@ -30,7 +30,7 @@ No live n8n runtime execution was performed in this repository change. Postgres 
 
 ## Repair pass for PR #7 review blockers
 
-- Hardened webhook/callable auth so workflows compare the supplied secret with `AGENT_WEBHOOK_SECRET`.
+- Hardened public webhook auth so n8n header-auth credentials guard the external entry points. Callable tool workflows are internal Execute Workflow targets.
 - Removed unreachable business logic after early returns in active Code nodes.
 - Made the orchestrator state-aware with action routing, selected tool lists, stage metadata, and accumulated `tool_results`.
 - Repaired content-generation dispatch for `campaign_plan`, `social_posts`, `email_copy`, `blog_article`, `image_prompts`, and `video_scripts`.

@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes('tool_content_generation');\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: 'tool_content_generation', status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: 'tool_content_generation'}}];\n}\nconst requestedRaw = normalized.requested_outputs || normalized.payload?.requested_outputs || ['campaign_plan','social_posts','email_copy','blog_article','image_prompts','video_scripts'];\nconst requested = Array.isArray(requestedRaw) ? requestedRaw : String(requestedRaw).split(',').map(v => v.trim()).filter(Boolean);\nconst registry = {\n  campaign_plan: {label: 'Generate campaign plan'},\n  social_posts: {label: 'Generate social posts'},\n  email_copy: {label: 'Generate email copy'},\n  blog_article: {label: 'Generate blog/article copy'},\n  image_prompts: {label: 'Generate image prompts'},\n  video_scripts: {label: 'Generate video scripts'}\n};\nconst outputs = requested.map(output_type => ({json: {...normalized, output_type, dispatch_label: registry[output_type]?.label || 'Future extension tool', dispatch_registry: registry, current_stage: 'tool_content_generation'}}));\nreturn outputs.length ? outputs : [{json: {...normalized, output_type: 'future_tool', dispatch_label: 'Future extension tool', current_stage: 'tool_content_generation'}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_content_generation';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nconst requestedRaw = normalized.requested_outputs || normalized.payload?.requested_outputs || ['campaign_plan','social_posts','email_copy','blog_article','image_prompts','video_scripts'];\nconst requested = Array.isArray(requestedRaw) ? requestedRaw : String(requestedRaw).split(',').map(v => v.trim()).filter(Boolean);\nconst registry = {\n  campaign_plan: {label: 'Generate campaign plan'},\n  social_posts: {label: 'Generate social posts'},\n  email_copy: {label: 'Generate email copy'},\n  blog_article: {label: 'Generate blog/article copy'},\n  image_prompts: {label: 'Generate image prompts'},\n  video_scripts: {label: 'Generate video scripts'}\n};\nconst outputs = requested.map(output_type => ({json: {...normalized, output_type, dispatch_label: registry[output_type]?.label || 'Future extension tool', dispatch_registry: registry, current_stage: toolName, live_mode: normalized.mode === 'live'}}));\nreturn outputs.length ? outputs : [{json: {...normalized, output_type: 'future_tool', dispatch_label: 'Future extension tool', current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
       }
     },
     {
@@ -71,7 +71,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') AS allowed; UPDATE content_jobs SET status='generating_outputs' WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+        "query": "WITH gate AS (\n  SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') AS allowed\n), job_update AS (\n  UPDATE content_jobs SET status='generating_outputs', updated_at=now()\n  WHERE id=NULLIF('{{$json.job_id}}','')::uuid AND (SELECT allowed FROM gate)\n  RETURNING id\n)\nSELECT (SELECT allowed FROM gate) AS allowed, '{{$json.job_id}}' AS job_id, '{{$json.mode}}' AS mode, ('{{$json.mode}}'='live') AS live_mode;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -85,18 +91,17 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
-            }
-          ]
-        },
+        "url": "={{$json.llm_base_url || \"https://api.openai.com/v1/chat/completions\"}}",
         "sendBody": true,
-        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:\"Generate the routed content output for output_type. Do not publish. Return strict JSON.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+        "jsonBody": "={{ {model:($json.llm_model || \"gpt-4o-mini\"), messages:[{role:'system',content:\"Generate the routed content output for output_type. Do not publish. Return strict JSON.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_LLM_HTTP_AUTH",
+          "name": "AI_LLM_HTTP_AUTH"
+        }
       }
     },
     {
@@ -109,7 +114,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.generated_output || state.fallback_payload || {mode: 'dry_run', output_type: state.output_type, items: []};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true, output_type: state.output_type};\n  }\n}\nreturn [{json: {...state, generated_output: parsed, generated_output_json: JSON.stringify(parsed || {}), raw_model_text: rawText, parse_warning: parseWarning, warning_message: warningMessage, qa_status: 'pending'}}];"
+        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.generated_output || state.fallback_payload || {mode: 'dry_run', output_type: state.output_type, items: []};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true, output_type: state.output_type};\n  }\n}\nconst outputJson = JSON.stringify(parsed || {});\nconst safeSql = value => String(value ?? '').replace(/'/g, \"''\");\nreturn [{json: {...state, generated_output: parsed, generated_output_json: outputJson, generated_output_json_sql: safeSql(outputJson), raw_model_text: rawText, raw_model_text_sql: safeSql(rawText), parse_warning: parseWarning, warning_message: warningMessage, warning_message_sql: safeSql(warningMessage), current_stage_sql: safeSql(state.current_stage), output_type_sql: safeSql(state.output_type), dispatch_label_sql: safeSql(state.dispatch_label), qa_status: 'pending'}}];"
       }
     },
     {
@@ -123,7 +128,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'GENERATION_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text}}', 2000), 'workflow', '{{$json.current_stage}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'GENERATION_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -137,7 +148,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload, output_payload)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.output_type}}','future_tool'), COALESCE('{{$json.output_type}}','future_tool') || '-' || to_char(now(),'YYYYMMDDHH24MISSMS'), 'completed', jsonb_build_object('dispatch_pattern','add output_type mapping in tool_content_generation'), COALESCE(NULLIF('{{$json.generated_output_json}}',''),'{}')::jsonb);\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE('{{$json.output_type}}','future_tool'), COALESCE('{{$json.dispatch_label}}','Generated output'), COALESCE(NULLIF('{{$json.generated_output_json}}',''),'{}')::jsonb, 'pending');\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'generated_outputs' AS status;"
+        "query": "INSERT INTO content_tasks (job_id, task_type, task_key, status, input_payload, output_payload)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE(NULLIF('{{$json.output_type_sql}}',''),'future_tool'), COALESCE(NULLIF('{{$json.output_type_sql}}',''),'future_tool') || '-' || to_char(now(),'YYYYMMDDHH24MISSMS'), 'completed', jsonb_build_object('dispatch_pattern','tool_content_generation'), COALESCE(NULLIF('{{$json.generated_output_json_sql}}',''),'{}')::jsonb);\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, COALESCE(NULLIF('{{$json.output_type_sql}}',''),'future_tool'), COALESCE(NULLIF('{{$json.dispatch_label_sql}}',''),'Generated output'), COALESCE(NULLIF('{{$json.generated_output_json_sql}}',''),'{}')::jsonb, 'pending');\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'generated_outputs' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -151,6 +168,59 @@
       ],
       "parameters": {
         "jsCode": "const base = $node['Normalize And Auth'].json;\nconst results = [...(base.tool_results || []), {tool: 'tool_content_generation', status: 'generated_outputs', output_type: base.output_type || $json.output_type}];\nreturn [{json: {...base, ...$json, status: 'generated_outputs', tool_results: results, extensibility: ['LinkedIn posts','YouTube scripts','Canva design generation','podcast episode assets','client proposal generation','SEO brief generation','image generation execution','CapCut packaging']}}];"
+      }
+    },
+    {
+      "id": "3a",
+      "name": "Plan Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.allowed}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3b",
+      "name": "Is Live Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        880,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.live_mode}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3c",
+      "name": "Return Waiting For Plan Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Normalize And Auth'].json;\nconst results = [...(base.tool_results || []), {tool: 'tool_content_generation', status: 'waiting_for_plan_approval', reason: 'plan approval is required before generation'}];\nreturn [{json: {...base, status: 'waiting_for_plan_approval', gate_blocked: true, gate_reason: 'plan approval is required before generation', tool_results: results}}];"
       }
     }
   ],
@@ -199,7 +269,43 @@
       "main": [
         [
           {
+            "node": "Plan Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Approved": {
+      "main": [
+        [
+          {
+            "node": "Is Live Mode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Waiting For Plan Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Live Mode": {
+      "main": [
+        [
+          {
             "node": "Call OpenAI Or LiteLLM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse LLM Response",
             "type": "main",
             "index": 0
           }
@@ -255,10 +361,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

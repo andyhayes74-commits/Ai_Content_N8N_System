@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_drive_assets';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_drive_assets';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
       }
     },
     {
@@ -73,7 +73,13 @@
         "resource": "folder",
         "operation": "create",
         "name": "={{$json.project_name || $json.job_id}}",
-        "parents": "={{$env.DEFAULT_PARENT_DRIVE_FOLDER_ID}}"
+        "parents": "={{$json.default_parent_drive_folder_id || $json.drive_folder_id || \"\"}}"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GOOGLE_DRIVE_AI_CONTENT",
+          "name": "GOOGLE_DRIVE_AI_CONTENT"
+        }
       }
     },
     {
@@ -89,6 +95,12 @@
         "url": "={{'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent('trashed=false')}}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api"
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GOOGLE_DRIVE_AI_CONTENT",
+          "name": "GOOGLE_DRIVE_AI_CONTENT"
+        }
       }
     },
     {
@@ -102,7 +114,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE content_jobs SET status='assets_scanning', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_assets (job_id, source_type, drive_file_id, file_name, mime_type, parse_status, extracted_metadata)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'google_drive', COALESCE('{{$json.drive_file_id}}','workspace-placeholder'), COALESCE('{{$json.file_name}}','workspace'), COALESCE('{{$json.mime_type}}','application/vnd.google-apps.folder'), 'indexed', jsonb_build_object('documents','parse/summarise documents','images','describe images','audio_video','reference placeholders','asset_index','created'));\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'asset_index', 'Drive asset index', jsonb_build_object('source','Google Drive','status','assets_parsed'), 'passed');\nUPDATE content_jobs SET status='assets_parsed', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid; SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'assets_parsed' AS status;"
+        "query": "UPDATE content_jobs SET status='assets_scanning', updated_at=now(), drive_root_folder_id=COALESCE(NULLIF('{{$json.id}}',''), NULLIF('{{$json.drive_folder_id}}',''), drive_root_folder_id) WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_assets (job_id, source_type, drive_file_id, file_name, mime_type, parse_status, extracted_metadata)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'google_drive', COALESCE(NULLIF('{{$json.id}}',''), NULLIF('{{$json.drive_file_id}}',''), 'dry-run-workspace'), COALESCE(NULLIF('{{$json.name}}',''), NULLIF('{{$json.file_name}}',''), 'workspace'), COALESCE(NULLIF('{{$json.mimeType}}',''), NULLIF('{{$json.mime_type}}',''), 'application/vnd.google-apps.folder'), 'indexed', jsonb_build_object('documents','parse/summarise documents','images','describe images','audio_video','reference placeholders','asset_index','created','mode','{{$json.mode}}'));\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'asset_index', 'Drive asset index', jsonb_build_object('source','Google Drive','status','assets_parsed','mode','{{$json.mode}}'), 'passed');\nUPDATE content_jobs SET status='assets_parsed', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'assets_parsed' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -116,6 +134,26 @@
       ],
       "parameters": {
         "jsCode": "const base = $node['Normalize And Auth'].json;\nconst current = $json;\nconst status = current.status || 'assets_parsed';\nconst results = [...(base.tool_results || []), {tool: 'tool_drive_assets', status, job_id: current.job_id || base.job_id || ''}];\nreturn [{json: {...base, ...current, job_id: current.job_id || base.job_id, status, tool_results: results, current_stage: 'tool_drive_assets'}}];"
+      }
+    },
+    {
+      "id": "3a",
+      "name": "Is Live Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.live_mode}}",
+              "value2": true
+            }
+          ]
+        }
       }
     }
   ],
@@ -146,7 +184,7 @@
       "main": [
         [
           {
-            "node": "Create Project Folder Metadata",
+            "node": "Is Live Mode",
             "type": "main",
             "index": 0
           }
@@ -154,6 +192,24 @@
         [
           {
             "node": "Return Skipped Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Live Mode": {
+      "main": [
+        [
+          {
+            "node": "Create Project Folder Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Persist Asset Index",
             "type": "main",
             "index": 0
           }
@@ -198,10 +254,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

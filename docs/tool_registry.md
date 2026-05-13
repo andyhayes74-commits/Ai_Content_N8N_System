@@ -1,6 +1,6 @@
 # Tool Registry
 
-All callable workflows accept JSON, require `x-agent-secret` when reached through webhooks or gateway context, and return JSON. Agent-safe means callable by the supervisor gateway within the documented safety boundaries.
+All callable workflows accept JSON and return JSON. Public API entry points use n8n header-auth credentials; callable tool workflows are internal Execute Workflow targets. Agent-safe means callable by the supervisor gateway within the documented safety boundaries.
 
 | Workflow | Purpose | Input JSON contract | Output JSON contract | Tables touched | Credentials | Approval gates | Agent-safe | Human-only |
 |---|---|---|---|---|---|---|---:|---:|
@@ -22,7 +22,7 @@ The core tables are preserved. A non-breaking migration adds `content_approvals.
 
 ## Auth and response parsing requirements
 
-Every webhook/callable workflow that receives agent or operator input must compare `x-agent-secret` or the forwarded `agent_secret` with `AGENT_WEBHOOK_SECRET`. Presence-only auth is not valid.
+Every public webhook workflow that receives agent or operator input must use the `AI_AGENT_WEBHOOK_AUTH` n8n credential. Callable tool workflows must not require repo-stored secrets.
 
 LLM-backed tools must parse OpenAI/LiteLLM chat-completion responses before storage. The expected path is `choices[0].message.content`; parsed JSON is stored in the workflow-specific `*_json` field, and parse warnings are logged to `content_errors`.
 

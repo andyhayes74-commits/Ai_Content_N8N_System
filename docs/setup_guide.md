@@ -4,13 +4,13 @@
 
 ```bash
 bash scripts/validate_repo.sh
-python scripts/static_workflow_audit.py
-python scripts/pre_n8n_readiness_check.py
+python3 scripts/static_workflow_audit.py
+python3 scripts/pre_n8n_readiness_check.py
 ```
 
-## 2. Configure environment
+## 2. Prepare n8n credentials
 
-Copy `.env.example` to the deployment environment and set Postgres, Google Drive, OpenAI/LiteLLM, supervisor secret, and notification values. Do not commit real secrets.
+Create the n8n credentials listed in `docs/credential_mapping.md`. Do not create env files for this repo.
 
 ## 3. Import active workflows only
 
@@ -26,11 +26,14 @@ Attach credentials named in `docs/credential_mapping.md`:
 
 - `POSTGRES_AI_CONTENT_DB`
 - `GOOGLE_DRIVE_AI_CONTENT`
-- `HTTP_OPENAI_OR_LITELLM`
+- `AI_LLM_HTTP_AUTH`
+- `AI_AGENT_WEBHOOK_AUTH`
 
 ## 5. Run sandbox dry-run
 
 Use `tests/sandbox_test_plan.md` and the payloads in `tests/payloads/`.
+
+For day-to-day operation, follow `docs/operator_manual.md`.
 
 ## 6. Promote only after live sandbox checks
 
@@ -39,4 +42,4 @@ Do not mark the system production-ready until n8n has executed Postgres, Drive, 
 
 ## 7. PR #7 repaired validation focus
 
-The validation scripts now fail if active workflows only check for secret presence instead of comparing to `AGENT_WEBHOOK_SECRET`, if Code nodes contain likely unreachable top-level return patterns, if LLM-backed tools store outputs without parsing chat-completion responses, or if active imports target anything outside `workflows/active/`.
+The validation scripts now fail if active workflows use env variables, if public webhooks lack n8n header-auth credentials, if service nodes lack declared n8n credentials, if approval gates do not branch before downstream work, if dry-run branches call live LLM/Drive nodes, if Code nodes contain likely unreachable top-level return patterns, or if active imports target anything outside `workflows/active/`.
