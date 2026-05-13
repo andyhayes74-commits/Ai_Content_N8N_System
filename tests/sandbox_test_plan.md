@@ -2,11 +2,9 @@
 
 This plan validates the operator-ready architecture in an n8n sandbox. It does not prove production readiness.
 
-## Header required for every webhook call
+## Header auth required for every webhook call
 
-```text
-x-agent-secret: <AGENT_WEBHOOK_SECRET>
-```
+Configure the public webhook nodes with the `AI_AGENT_WEBHOOK_AUTH` n8n HTTP Header Auth credential. Use the header name and value stored in that n8n credential for calls to `v1/orchestrator`, `v1/supervisor`, and `v1/human-review`.
 
 ## Payload sequence
 
@@ -40,4 +38,4 @@ After the dry-run path passes, repeat selected analysis, planning, generation, Q
 
 ## Auth failure smoke test
 
-Before using valid credentials, send one request with a missing or incorrect `x-agent-secret`. The expected result is an unauthorized failure. A request with only a present-but-wrong secret must not be accepted.
+Before using valid credentials, send one request with missing or incorrect header-auth values. The expected result is an unauthorized failure.

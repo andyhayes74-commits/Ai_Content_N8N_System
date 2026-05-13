@@ -28,7 +28,7 @@ The system now uses one main workflow plus nine callable workflows. The active i
 
 ## Orchestrator routing and state handoff
 
-The orchestrator authenticates against `AGENT_WEBHOOK_SECRET`, computes an action route, and passes forward `job_id`, `mode`, `action`, `payload`, `desired_tools`, `tool_results`, `current_stage`, `status`, and error metadata. Tool workflows no-op when they are not selected for the current action, so targeted actions do not run inappropriate lifecycle stages.
+Public webhook entry points authenticate with n8n header-auth credentials. The orchestrator computes an action route and passes forward `job_id`, `mode`, `action`, `payload`, `desired_tools`, `tool_results`, `current_stage`, `status`, and error metadata. Tool workflows are internal Execute Workflow targets and no-op when they are not selected for the current action, so targeted actions do not run inappropriate lifecycle stages.
 
 Supported route groups:
 

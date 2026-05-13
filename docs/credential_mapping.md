@@ -1,45 +1,37 @@
 # Credential Mapping
 
-## Environment/config placeholders
+This system uses n8n credentials only. Do not create env files and do not commit secrets or API keys to this repository.
 
-| Purpose | Placeholder/config |
-|---|---|
-| Postgres host | `POSTGRES_HOST` |
-| Postgres port | `POSTGRES_PORT` |
-| Postgres DB | `POSTGRES_DB` |
-| Postgres user | `POSTGRES_USER` |
-| Postgres password | `POSTGRES_PASSWORD` |
-| n8n base URL for future API deployment | `N8N_BASE_URL` |
-| n8n API key for future API deployment | `N8N_API_KEY` |
-| Google Drive credential marker | `GOOGLE_DRIVE_CREDENTIAL_ID` |
-| Default parent Drive folder | `DEFAULT_PARENT_DRIVE_FOLDER_ID` |
-| Google Drive access token for HTTP fallback | `GOOGLE_DRIVE_ACCESS_TOKEN` |
-| OpenAI key | `OPENAI_API_KEY` |
-| OpenAI/LiteLLM model | `OPENAI_MODEL` |
-| LiteLLM OpenAI-compatible base URL | `LITELLM_BASE_URL` |
-| LiteLLM key | `LITELLM_API_KEY` |
-| Agent/supervisor webhook secret | `AGENT_WEBHOOK_SECRET` |
-| Human/operator notification target | `NOTIFICATION_WEBHOOK_URL` |
+## Required n8n credentials
 
-## Suggested n8n credentials
-
-| Area | Suggested n8n credential name | Used by |
+| Credential name | n8n credential type | Used by |
 |---|---|---|
-| Postgres | `POSTGRES_AI_CONTENT_DB` | all tool workflows and gateways |
-| Google Drive | `GOOGLE_DRIVE_AI_CONTENT` | `tool_drive_assets`, `tool_qa_delivery` |
-| OpenAI/LiteLLM HTTP | `HTTP_OPENAI_OR_LITELLM` | analysis, planning, generation, QA |
+| `AI_AGENT_WEBHOOK_AUTH` | HTTP Header Auth | `ai_content_orchestrator`, `api_supervisor_gateway`, `api_human_review_gateway` |
+| `POSTGRES_AI_CONTENT_DB` | Postgres | all database read/write nodes |
+| `GOOGLE_DRIVE_AI_CONTENT` | Google Drive OAuth2 | Drive folder, asset scan, and delivery pack nodes |
+| `AI_LLM_HTTP_AUTH` | HTTP Header Auth | OpenAI-compatible LLM request nodes |
+
+## Non-secret runtime fields
+
+These values can be edited in n8n node settings or passed in payloads where supported:
+
+| Value | Where used |
+|---|---|
+| LLM base URL | LLM HTTP Request node `url`; defaults to OpenAI-compatible chat completions URL |
+| LLM model | LLM request body; defaults to `gpt-4o-mini` |
+| Default parent Drive folder ID | `default_parent_drive_folder_id` payload field or Drive node parent field |
 
 ## Workflow credential needs
 
-| Workflow | Postgres | LLM | Google Drive | Agent secret |
+| Workflow | Public webhook auth | Postgres | LLM | Google Drive |
 |---|---:|---:|---:|---:|
-| `ai_content_orchestrator` | via tools | via tools | via tools | yes |
-| `tool_job_intake` | yes | no | no | yes |
-| `tool_drive_assets` | yes | optional | yes | yes |
-| `tool_request_analysis` | yes | yes | no | yes |
-| `tool_content_planning` | yes | yes | no | yes |
-| `tool_content_generation` | yes | yes | no | yes |
-| `tool_qa_delivery` | yes | yes | yes | yes |
-| `tool_logging` | yes | no | no | yes |
-| `api_supervisor_gateway` | yes | routed | routed | yes |
-| `api_human_review_gateway` | yes | no | no | yes |
+| `ai_content_orchestrator` | yes | via tools | via tools | via tools |
+| `api_supervisor_gateway` | yes | yes | routed | routed |
+| `api_human_review_gateway` | yes | yes | no | no |
+| `tool_job_intake` | no | yes | no | no |
+| `tool_drive_assets` | no | yes | no | yes |
+| `tool_request_analysis` | no | yes | yes | no |
+| `tool_content_planning` | no | yes | yes | no |
+| `tool_content_generation` | no | yes | yes | no |
+| `tool_qa_delivery` | no | yes | yes | yes |
+| `tool_logging` | no | yes | no | no |

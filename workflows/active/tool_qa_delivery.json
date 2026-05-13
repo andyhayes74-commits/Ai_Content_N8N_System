@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_qa_delivery';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_qa_delivery';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
       }
     },
     {
@@ -71,18 +71,17 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.LITELLM_BASE_URL || 'https://api.openai.com/v1/chat/completions'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{'Bearer ' + ($env.LITELLM_API_KEY || $env.OPENAI_API_KEY)}}"
-            }
-          ]
-        },
+        "url": "={{$json.llm_base_url || \"https://api.openai.com/v1/chat/completions\"}}",
         "sendBody": true,
-        "jsonBody": "={{ {model:$env.OPENAI_MODEL, messages:[{role:'system',content:\"QA outputs. Flag unsupported claims and missing information. Return strict JSON.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}"
+        "jsonBody": "={{ {model:($json.llm_model || \"gpt-4o-mini\"), messages:[{role:'system',content:\"QA outputs. Flag unsupported claims and missing information. Return strict JSON.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_LLM_HTTP_AUTH",
+          "name": "AI_LLM_HTTP_AUTH"
+        }
       }
     },
     {
@@ -95,7 +94,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.fallback_payload || state.qa_report || {mode: 'dry_run', workflow: state.current_stage, note: 'dry-run fallback output'};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true};\n  }\n}\nreturn [{json: {...state, qa_report: parsed, qa_report_json: JSON.stringify(parsed || {}), raw_model_text: rawText, parse_warning: parseWarning, warning_message: warningMessage, qa_status: 'pending'}}];"
+        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.fallback_payload || state.qa_report || {mode: 'dry_run', workflow: state.current_stage, note: 'dry-run fallback output'};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true};\n  }\n}\nconst outputJson = JSON.stringify(parsed || {});\nconst safeSql = value => String(value ?? '').replace(/'/g, \"''\");\nreturn [{json: {...state, qa_report: parsed, qa_report_json: outputJson, qa_report_json_sql: safeSql(outputJson), raw_model_text: rawText, raw_model_text_sql: safeSql(rawText), parse_warning: parseWarning, warning_message: warningMessage, warning_message_sql: safeSql(warningMessage), current_stage_sql: safeSql(state.current_stage), output_type_sql: safeSql(state.output_type), dispatch_label_sql: safeSql(state.dispatch_label), qa_status: 'pending'}}];"
       }
     },
     {
@@ -109,7 +108,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'QA_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text}}', 2000), 'workflow', '{{$json.current_stage}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'QA_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -123,7 +128,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE content_jobs SET status='qa_in_progress', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nUPDATE content_outputs SET qa_status='needs_human_review', updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND qa_status='pending';\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'qa_report', 'QA report', COALESCE(NULLIF('{{$json.qa_report_json}}',''),'{}')::jsonb, 'needs_human_review');\nUPDATE content_jobs SET status='waiting_for_human_review', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Final delivery approval gate reached',jsonb_build_object('approval_stage','final_delivery','human_only',true));\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'waiting_for_human_review' AS status;"
+        "query": "UPDATE content_jobs SET status='qa_in_progress', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nUPDATE content_outputs SET qa_status='needs_human_review', updated_at=now() WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND qa_status='pending';\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'qa_report', 'QA report', COALESCE(NULLIF('{{$json.qa_report_json_sql}}',''),'{}')::jsonb, 'needs_human_review');\nUPDATE content_jobs SET status='waiting_for_human_review', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Final delivery approval gate reached',jsonb_build_object('approval_stage','final_delivery','human_only',true));\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'waiting_for_human_review' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -137,7 +148,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='final_delivery' AND decision='approved' AND reviewer_type='human') AS final_human_approved;"
+        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='final_delivery' AND decision='approved' AND reviewer_type='human') AS final_human_approved,\n  '{{$json.job_id}}' AS job_id,\n  '{{$json.mode}}' AS mode,\n  ('{{$json.mode}}'='live') AS live_mode;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -153,8 +170,14 @@
         "resource": "file",
         "operation": "upload",
         "name": "={{'delivery-pack-' + $json.job_id + '.json'}}",
-        "parents": "={{$json.drive_root_folder_id || $env.DEFAULT_PARENT_DRIVE_FOLDER_ID}}",
+        "parents": "={{$json.drive_root_folder_id || $json.default_parent_drive_folder_id || \"\"}}",
         "binaryData": false
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "GOOGLE_DRIVE_AI_CONTENT",
+          "name": "GOOGLE_DRIVE_AI_CONTENT"
+        }
       }
     },
     {
@@ -168,7 +191,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status) VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'delivery_pack', 'Human-approved delivery pack', jsonb_build_object('delivery_ready',true,'generated_after_human_approval',true), 'passed');\nUPDATE content_jobs SET status='delivery_ready', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid; SELECT NULLIF('{{$json.job_id}}','') AS job_id, 'delivery_ready' AS status;"
+        "query": "WITH outputs AS (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object('output_type', output_type, 'title', title, 'qa_status', qa_status, 'structured_data', structured_data) ORDER BY created_at), '[]'::jsonb) AS included_outputs\n  FROM content_outputs WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND output_type <> 'delivery_pack'\n), pack AS (\n  INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status, drive_file_id)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'delivery_pack', 'Human-approved delivery pack', jsonb_build_object('delivery_ready',true,'generated_after_human_approval',true,'included_outputs',(SELECT included_outputs FROM outputs),'drive_upload_response',COALESCE(NULLIF('{{$json.id}}',''),'')), 'passed', NULLIF('{{$json.id}}',''))\n  RETURNING id\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid,'delivery_pack_ready','Delivery pack created after final human approval',jsonb_build_object('delivery_pack_id',(SELECT id FROM pack)))\n)\nUPDATE content_jobs SET status='delivery_ready', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'delivery_ready' AS status, (SELECT id::text FROM pack) AS delivery_pack_id;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -182,6 +211,59 @@
       ],
       "parameters": {
         "jsCode": "const base = $node['Normalize And Auth'].json;\nconst current = $json;\nconst status = current.status || 'waiting_for_human_review';\nconst results = [...(base.tool_results || []), {tool: 'tool_qa_delivery', status, job_id: current.job_id || base.job_id || ''}];\nreturn [{json: {...base, ...current, job_id: current.job_id || base.job_id, status, tool_results: results, current_stage: 'tool_qa_delivery'}}];"
+      }
+    },
+    {
+      "id": "3a",
+      "name": "Is Live Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.live_mode}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7a",
+      "name": "Final Human Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.final_human_approved}}",
+              "value2": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7b",
+      "name": "Return Waiting For Final Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -240
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Normalize And Auth'].json;\nconst results = [...(base.tool_results || []), {tool: 'tool_qa_delivery', status: 'waiting_for_human_review', reason: 'final human approval is required before delivery pack'}];\nreturn [{json: {...base, status: 'waiting_for_human_review', gate_blocked: true, gate_reason: 'final human approval is required before delivery pack', tool_results: results}}];"
       }
     }
   ],
@@ -212,7 +294,7 @@
       "main": [
         [
           {
-            "node": "Call OpenAI Or LiteLLM",
+            "node": "Is Live Mode",
             "type": "main",
             "index": 0
           }
@@ -220,6 +302,24 @@
         [
           {
             "node": "Return Skipped Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Live Mode": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI Or LiteLLM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse LLM Response",
             "type": "main",
             "index": 0
           }
@@ -274,7 +374,25 @@
       "main": [
         [
           {
+            "node": "Final Human Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Human Approved": {
+      "main": [
+        [
+          {
             "node": "Generate Delivery Pack Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Waiting For Final Approval",
             "type": "main",
             "index": 0
           }
@@ -308,10 +426,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

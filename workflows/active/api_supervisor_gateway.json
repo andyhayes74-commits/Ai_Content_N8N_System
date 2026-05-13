@@ -15,7 +15,14 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "v1/supervisor",
-        "responseMode": "lastNode"
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_AGENT_WEBHOOK_AUTH",
+          "name": "AI_AGENT_WEBHOOK_AUTH"
+        }
       }
     },
     {
@@ -28,7 +35,27 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst action = body.action || 'check_status';\nconst forbidden = ['delete_files','delete_file','publish_content','publish','send_final','send_final_client_deliverables','change_credentials','modify_schema','modify_database_schema','edit_workflows','edit_n8n_workflows','approve_analysis','approve_plan','approve_final_delivery'];\nif (forbidden.includes(action)) {\n  throw new Error('Action is forbidden for agents or requires the human review gateway');\n}\nreturn [{json: {...body, agent_secret: secret, action, allowed_actions: ['create_job','submit_message','attach_drive_folder','check_status','list_active_jobs','progress_update','error_report','request_revision','retry','pause','resume','cancel','generate_outputs','qa_delivery']}}];"
+        "jsCode": "const body = $json.body ?? {};\nconst action = body.action || 'check_status';\nconst forbidden = ['delete_files','delete_file','publish_content','publish','send_final','send_final_client_deliverables','change_credentials','modify_schema','modify_database_schema','edit_workflows','edit_n8n_workflows','approve_analysis','approve_plan','approve_final_delivery'];\nif (forbidden.includes(action)) {\n  throw new Error('Action is forbidden for agents or requires the human review gateway');\n}\nconst route_to_orchestrator = !['check_status','list_active_jobs'].includes(action);\nreturn [{json: {...body, action, route_to_orchestrator, allowed_actions: ['create_job','submit_message','attach_drive_folder','check_status','list_active_jobs','progress_update','error_report','request_revision','retry','pause','resume','cancel','generate_outputs','qa_delivery']}}];"
+      }
+    },
+    {
+      "id": "3a",
+      "name": "Needs Orchestrator",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        330,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.route_to_orchestrator}}",
+              "value2": true
+            }
+          ]
+        }
       }
     },
     {
@@ -52,7 +79,6 @@
             "action": "={{$json.action}}",
             "mode": "={{$json.mode || 'dry_run'}}",
             "payload": "={{$json}}",
-            "agent_secret": "={{$json.agent_secret}}",
             "desired_tools": "={{$json.desired_tools}}",
             "tool_results": "={{$json.tool_results}}",
             "current_stage": "={{$json.current_stage}}",
@@ -73,7 +99,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id::text AS job_id, status::text, updated_at FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid;"
+        "query": "SELECT id::text AS job_id, status::text, updated_at, project_name, drive_root_folder_id,\n  (SELECT count(*) FROM content_tasks WHERE job_id=content_jobs.id AND status NOT IN ('completed','cancelled')) AS active_task_count,\n  (SELECT count(*) FROM content_outputs WHERE job_id=content_jobs.id) AS output_count,\n  (SELECT count(*) FROM content_errors WHERE job_id=content_jobs.id AND resolved_at IS NULL) AS open_error_count\nFROM content_jobs\nWHERE ('{{$json.action}}'='list_active_jobs' AND status NOT IN ('delivery_ready','completed','cancelled','failed'))\n   OR id=NULLIF('{{$json.job_id}}','')::uuid\nORDER BY updated_at DESC\nLIMIT CASE WHEN '{{$json.action}}'='list_active_jobs' THEN 25 ELSE 1 END;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -107,7 +139,25 @@
       "main": [
         [
           {
+            "node": "Needs Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Orchestrator": {
+      "main": [
+        [
+          {
             "node": "Route To Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Status Query",
             "type": "main",
             "index": 0
           }
@@ -118,7 +168,7 @@
       "main": [
         [
           {
-            "node": "Status Query",
+            "node": "Return Supervisor Response",
             "type": "main",
             "index": 0
           }
@@ -141,10 +191,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

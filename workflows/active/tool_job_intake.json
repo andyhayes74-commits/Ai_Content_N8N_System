@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || incoming.agent_secret || nestedPayload.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.agent_secret = secret;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_job_intake';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_job_intake';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nconst bodyForSql = {...normalized, requested_outputs: normalized.requested_outputs || []};\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live', payload_sql: JSON.stringify(bodyForSql).replace(/'/g, \"''\")}}];"
       }
     },
     {
@@ -71,7 +71,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH upsert_job AS (\nINSERT INTO content_jobs (external_job_ref, project_name, brief_text, requested_outputs, drive_root_folder_id, status, created_by)\nVALUES (NULLIF('{{$json.external_job_ref}}',''), COALESCE('{{$json.project_name}}','Untitled AI content job'), COALESCE('{{$json.brief_text}}',''), COALESCE(NULLIF('{{$json.requested_outputs_json || JSON.stringify($json.requested_outputs || [])}}',''),'[]')::jsonb, NULLIF('{{$json.drive_folder_id}}',''), 'intake_complete', COALESCE('{{$json.created_by}}','api_supervisor'))\nON CONFLICT (external_job_ref) DO UPDATE SET updated_at=now(), status='intake_complete', brief_text=EXCLUDED.brief_text RETURNING id, status\n), msg AS (\nINSERT INTO job_messages (job_id, sender_type, sender_id, message_type, message_text, attachments)\nSELECT id, 'agent', COALESCE('{{$json.sender_id}}','supervisor'), 'brief', COALESCE('{{$json.message}}','{{$json.brief_text}}',''), '[]'::jsonb FROM upsert_job RETURNING id\n), event AS (\nINSERT INTO content_events (job_id, event_type, message, metadata) SELECT id, 'intake_complete', 'Job intake completed', jsonb_build_object('operator_architecture','v2','dry_run',COALESCE('{{$json.mode}}','dry_run')) FROM upsert_job RETURNING id)\nSELECT id::text AS job_id, status::text AS status FROM upsert_job;"
+        "query": "WITH payload AS (SELECT '{{$json.payload_sql}}'::jsonb AS body), upsert_job AS (\nINSERT INTO content_jobs (external_job_ref, project_name, brief_text, requested_outputs, drive_root_folder_id, status, created_by)\nSELECT NULLIF(body->>'external_job_ref',''), COALESCE(NULLIF(body->>'project_name',''),'Untitled AI content job'), COALESCE(body->>'brief_text',''), COALESCE(body->'requested_outputs','[]'::jsonb), NULLIF(body->>'drive_folder_id',''), 'intake_complete', COALESCE(NULLIF(body->>'created_by',''),'api_supervisor') FROM payload\nON CONFLICT (external_job_ref) DO UPDATE SET updated_at=now(), status='intake_complete', brief_text=EXCLUDED.brief_text RETURNING id, status\n), msg AS (\nINSERT INTO job_messages (job_id, sender_type, sender_id, message_type, message_text, attachments)\nSELECT id, 'agent', COALESCE(NULLIF((SELECT body->>'sender_id' FROM payload),''),'supervisor'), 'brief', COALESCE((SELECT body->>'message' FROM payload),(SELECT body->>'brief_text' FROM payload),''), '[]'::jsonb FROM upsert_job RETURNING id\n), event AS (\nINSERT INTO content_events (job_id, event_type, message, metadata) SELECT id, 'intake_complete', 'Job intake completed', jsonb_build_object('operator_architecture','v2','mode',(SELECT body->>'mode' FROM payload)) FROM upsert_job RETURNING id)\nSELECT id::text AS job_id, status::text AS status FROM upsert_job;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -145,10 +151,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }

@@ -15,7 +15,14 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "v1/human-review",
-        "responseMode": "lastNode"
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_AGENT_WEBHOOK_AUTH",
+          "name": "AI_AGENT_WEBHOOK_AUTH"
+        }
       }
     },
     {
@@ -28,7 +35,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const headers = $json.headers ?? {};\nconst body = $json.body ?? {};\nconst secret = headers['x-agent-secret'] || headers['X-Agent-Secret'] || body.agent_secret || '';\nconst expected = $env.AGENT_WEBHOOK_SECRET || '';\nif (!secret || !expected || secret !== expected) {\n  throw new Error('unauthorized: x-agent-secret must equal AGENT_WEBHOOK_SECRET');\n}\nconst stage = body.approval_stage;\nif (!['analysis','plan','final_delivery'].includes(stage)) {\n  throw new Error('Invalid approval_stage');\n}\nreturn [{json: {...body, agent_secret: secret, reviewer_type: 'human'}}];"
+        "jsCode": "const body = $json.body ?? {};\nconst stage = body.approval_stage;\nconst decision = body.decision || 'approved';\nif (!['analysis','plan','final_delivery'].includes(stage)) {\n  throw new Error('Invalid approval_stage');\n}\nif (!['approved','revision_requested','rejected'].includes(decision)) {\n  throw new Error('Invalid decision');\n}\nconst payload = {\n  ...body,\n  decision,\n  reviewer_type: 'human',\n  reviewer_id: 'human:' + (body.reviewer_name || body.reviewer_id || 'operator')\n};\nreturn [{json: {...payload, payload_sql: JSON.stringify(payload).replace(/'/g, \"''\")}}];"
       }
     },
     {
@@ -42,7 +49,13 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_approvals (job_id, approval_stage, decision, reviewer_id, reviewer_type, reviewer_notes)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, '{{$json.approval_stage}}', COALESCE('{{$json.decision}}','approved'), 'human:' || COALESCE('{{$json.reviewer_name}}','operator'), 'human', COALESCE('{{$json.notes}}',''));\nUPDATE content_jobs SET status=CASE WHEN '{{$json.approval_stage}}'='analysis' THEN 'analysis_complete'::job_status WHEN '{{$json.approval_stage}}'='plan' THEN 'generating_outputs'::job_status WHEN '{{$json.approval_stage}}'='final_delivery' THEN 'delivery_ready'::job_status ELSE status END, updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.approval_stage}}' AS approval_stage, COALESCE('{{$json.decision}}','approved') AS decision;"
+        "query": "WITH payload AS (SELECT '{{$json.payload_sql}}'::jsonb AS body), approval AS (\n  INSERT INTO content_approvals (job_id, approval_stage, decision, reviewer_id, reviewer_type, reviewer_notes)\n  SELECT NULLIF(body->>'job_id','')::uuid, body->>'approval_stage', body->>'decision', COALESCE(NULLIF(body->>'reviewer_id',''),'human:operator'), 'human', COALESCE(body->>'notes','') FROM payload\n  RETURNING job_id, approval_stage, decision\n), job_update AS (\n  UPDATE content_jobs SET status=CASE\n    WHEN (SELECT approval_stage FROM approval)='analysis' AND (SELECT decision FROM approval)='approved' THEN 'analysis_complete'::job_status\n    WHEN (SELECT approval_stage FROM approval)='plan' AND (SELECT decision FROM approval)='approved' THEN 'generating_outputs'::job_status\n    WHEN (SELECT approval_stage FROM approval)='final_delivery' AND (SELECT decision FROM approval)='approved' THEN 'waiting_for_human_review'::job_status\n    WHEN (SELECT decision FROM approval)='revision_requested' THEN 'paused'::job_status\n    WHEN (SELECT decision FROM approval)='rejected' THEN 'cancelled'::job_status\n    ELSE status END, updated_at=now()\n  WHERE id=(SELECT job_id FROM approval) RETURNING id, status\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  SELECT job_id,'approval_recorded','Human approval decision recorded',jsonb_build_object('approval_stage',approval_stage,'decision',decision,'human_only',true) FROM approval\n)\nSELECT job_id::text, approval_stage, decision, (SELECT status::text FROM job_update) AS status FROM approval;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
       }
     },
     {
@@ -99,10 +112,5 @@
     "executionOrder": "v1",
     "saveManualExecutions": true
   },
-  "tags": [
-    {
-      "name": "operator-ready"
-    }
-  ],
   "versionId": "operator-ready-v2-repaired"
 }
