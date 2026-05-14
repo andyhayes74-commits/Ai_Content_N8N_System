@@ -1,1 +1,109 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["job_id","overall_status","checks","required_revisions"],"properties":{"job_id":{"type":"string"},"overall_status":{"type":"string","enum":["pass","review_required","fail"]},"checks":{"type":"array","items":{"type":"object","required":["name","status","notes"],"properties":{"name":{"type":"string"},"status":{"type":"string"},"notes":{"type":"string"}}}},"required_revisions":{"type":"array","items":{"type":"string"}}}}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "job_id",
+    "overall_status",
+    "checks",
+    "issues",
+    "required_revisions"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "overall_status": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "repairable_issues",
+        "review_required",
+        "fail"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "notes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "issue_code",
+          "severity",
+          "repairable",
+          "repair_type",
+          "message"
+        ],
+        "properties": {
+          "issue_code": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "repairable": {
+            "type": "boolean"
+          },
+          "repair_type": {
+            "type": "string"
+          },
+          "output_type": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "required_revisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "repair_summary": {
+      "type": "object",
+      "properties": {
+        "issue_count": {
+          "type": "integer"
+        },
+        "repairable_issue_count": {
+          "type": "integer"
+        },
+        "blocking_issue_count": {
+          "type": "integer"
+        },
+        "max_repair_attempts": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

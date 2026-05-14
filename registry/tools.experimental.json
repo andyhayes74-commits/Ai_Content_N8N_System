@@ -1,5 +1,58 @@
 {
-  "version": "2.1.0",
+  "version": "2.4.0",
   "status": "experimental_tools_runtime_context",
-  "tools": []
+  "tools": [
+    {
+      "tool_id": "tool_repair_output",
+      "workflow_name": "tool_repair_output",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "qa_repair",
+      "description": "Future dedicated repair tool for safe QA fixes such as JSON repair, missing fields, tone, formatting, and length corrections.",
+      "capabilities": [
+        "repair_invalid_json",
+        "repair_missing_fields",
+        "repair_tone_mismatch",
+        "remove_unsupported_claims",
+        "repair_formatting",
+        "repair_length_limits"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "output_id": "uuid optional",
+        "issue": "object",
+        "max_repair_attempts": "integer optional",
+        "mode": "dry_run|live"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "output_id": "uuid optional",
+        "status": "repaired|queued|requires_human",
+        "repair_attempt_id": "uuid"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_repair_attempts",
+        "content_errors",
+        "content_events"
+      ],
+      "approval_policy": "qa_only",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "qa",
+        "repair",
+        "audit"
+      ]
+    }
+  ]
 }
