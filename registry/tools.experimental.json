@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
+  "version": "2.7.0",
   "status": "experimental_tools_runtime_context",
   "tools": [
     {
@@ -52,6 +52,375 @@
         "qa",
         "repair",
         "audit"
+      ]
+    },
+    {
+      "tool_id": "tool_generate_social_posts",
+      "workflow_name": "tool_generate_social_posts",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_content_generation",
+      "description": "Generate platform-aware social posts from an approved plan.",
+      "capabilities": [
+        "generate_social_posts",
+        "adapt_posts_by_channel",
+        "create_caption_variants"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_tasks",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_generate_blog_article",
+      "workflow_name": "tool_generate_blog_article",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_content_generation",
+      "description": "Generate long-form blog or article drafts from an approved plan.",
+      "capabilities": [
+        "generate_blog_article",
+        "generate_article_outline",
+        "generate_seo_article_sections"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_tasks",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_generate_email_campaign",
+      "workflow_name": "tool_generate_email_campaign",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_content_generation",
+      "description": "Generate email campaign copy from an approved plan.",
+      "capabilities": [
+        "generate_email_subjects",
+        "generate_email_body",
+        "generate_email_sequence"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_tasks",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_generate_image_briefs",
+      "workflow_name": "tool_generate_image_briefs",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_content_generation",
+      "description": "Generate image briefs and prompts for design or image-generation tools.",
+      "capabilities": [
+        "generate_image_briefs",
+        "generate_image_prompts",
+        "map_visual_requirements"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_tasks",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_generate_video_script",
+      "workflow_name": "tool_generate_video_script",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_content_generation",
+      "description": "Generate short video scripts and shot guidance.",
+      "capabilities": [
+        "generate_video_script",
+        "generate_hook_variants",
+        "generate_shot_list"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_tasks",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_qa_claim_checker",
+      "workflow_name": "tool_qa_claim_checker",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_qa",
+      "description": "Check generated outputs against approved and forbidden claims.",
+      "capabilities": [
+        "check_approved_claims",
+        "detect_forbidden_claims",
+        "flag_unsupported_claims"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_errors",
+        "client_profiles"
+      ],
+      "approval_policy": "qa_only",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_qa_brand_checker",
+      "workflow_name": "tool_qa_brand_checker",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_qa",
+      "description": "Check generated outputs against brand voice, tone, and client rules.",
+      "capabilities": [
+        "check_brand_voice",
+        "check_tone_rules",
+        "check_client_compliance_notes"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_errors",
+        "client_profiles"
+      ],
+      "approval_policy": "qa_only",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
+      ]
+    },
+    {
+      "tool_id": "tool_delivery_packager",
+      "workflow_name": "tool_delivery_packager",
+      "version": "0.1.0",
+      "status": "experimental",
+      "category": "specialist_delivery",
+      "description": "Package approved outputs, QA report, repair history, and approval history for delivery.",
+      "capabilities": [
+        "create_delivery_pack",
+        "include_approval_history",
+        "include_repair_history"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "plan_id": "uuid optional",
+        "mode": "dry_run|live",
+        "client_profile": "object optional",
+        "asset_modules": "array optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "completed|requires_human|failed",
+        "output_ids": "array optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_outputs",
+        "content_events",
+        "content_repair_attempts",
+        "content_approvals"
+      ],
+      "approval_policy": "operator_final",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "experimental",
+        "specialist",
+        "v2.7"
       ]
     }
   ]
