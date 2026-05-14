@@ -1,0 +1,90 @@
+{
+  "name": "TEMP_webhook_apply_v2_6_asset_modules_migration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "temp/apply-v2-6-asset-modules-migration",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "id": "migration-webhook",
+      "name": "Migration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_AGENT_WEBHOOK_AUTH",
+          "name": "AI_AGENT_WEBHOOK_AUTH"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Non-breaking v2.6 reusable asset modules.\n\nCREATE TABLE IF NOT EXISTS content_asset_modules (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  client_profile_id UUID REFERENCES client_profiles(id) ON DELETE CASCADE,\n  job_id UUID REFERENCES content_jobs(id) ON DELETE SET NULL,\n  module_key TEXT NOT NULL,\n  module_type TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'active',\n  compatibility_tags JSONB NOT NULL DEFAULT '[]'::jsonb,\n  usage_rules JSONB NOT NULL DEFAULT '{}'::jsonb,\n  source_files JSONB NOT NULL DEFAULT '[]'::jsonb,\n  generated_assets JSONB NOT NULL DEFAULT '[]'::jsonb,\n  prompt_context JSONB NOT NULL DEFAULT '{}'::jsonb,\n  version INT NOT NULL DEFAULT 1,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  UNIQUE(client_profile_id, module_key, version)\n);\n\nCREATE INDEX IF NOT EXISTS idx_asset_modules_client_status ON content_asset_modules(client_profile_id, status);\n\nSELECT true AS migration_applied, 'v2.6_asset_modules' AS migration;"
+      },
+      "id": "apply-migration",
+      "name": "Apply v2.6 Asset Modules Migration",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Return Migration Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Migration Webhook": {
+      "main": [
+        [
+          {
+            "node": "Apply v2.6 Asset Modules Migration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply v2.6 Asset Modules Migration": {
+      "main": [
+        [
+          {
+            "node": "Return Migration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "id": "TEMP_webhook_apply_v2_6_asset_modules_migration"
+}

@@ -1,0 +1,21 @@
+{
+  "action": "create_job",
+  "mode": "dry_run",
+  "external_job_ref": "replace-with-unique-ref",
+  "project_name": "Asset module dry-run test",
+  "brief_text": "Create content using reusable client asset context.",
+  "drive_folder_id": "dry-run-drive-folder",
+  "client_profile": {
+    "client_code": "demo_asset_client",
+    "client_name": "Demo Asset Client",
+    "default_approval_policy": "qa_only",
+    "asset_roots": [
+      "dry-run-drive-folder"
+    ],
+    "output_defaults": {
+      "requested_outputs": [
+        "social_posts"
+      ]
+    }
+  }
+}
