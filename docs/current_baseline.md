@@ -4,7 +4,7 @@ Date: 2026-05-14
 
 ## Canonical reference
 
-`docs/system_source_of_truth.md` is the controlling development brief. The current system is a working transitional v1 pipeline, not the finished modular platform.
+`docs/system_source_of_truth.md` is the controlling development brief. The current system has moved beyond the transitional v1 pipeline into the v3 production-ready platform foundation.
 
 ## Branches
 
@@ -28,24 +28,15 @@ The current active workflows are:
 - `tool_qa_delivery`
 - `tool_logging`
 
-The baseline dry-run test created/updated job:
+Latest verified v3 smoke test:
 
 ```text
-170be04b-5584-4274-bcdd-623c2d62a402
+job_id: 84af3f7f-dfb8-4014-a441-e9e51f9a6e89
+plan_id: cab03eae-a951-419a-8e06-4fd55d00e348
+final_status: delivery_ready
 ```
 
-The job reached:
-
-```text
-waiting_for_analysis_approval
-```
-
-Supervisor `check_status` returned:
-
-```text
-output_count: 3
-open_error_count: 0
-```
+The smoke test covered create job, generate plan, run plan, supervisor status, and recent n8n execution status checks.
 
 ## Runtime-only n8n state
 
@@ -75,14 +66,17 @@ The repository contains the workflow structure and deploy behaviour needed to re
 - Execute Workflow references are resolved during deployment by workflow ID map,
 - Google Drive nodes use the credential slot expected by the current n8n version,
 - parse-warning database nodes pass a row forward when no warning is inserted,
-- the temporary Postgres setup workflow is stored in `workflows/placeholders/TEMP_setup_ai_content_postgres_schema.json`.
+- temporary migration workflows are stored under `workflows/placeholders/` for controlled setup/migration use only and should be deactivated after use.
 
-## Next target
+## Implemented platform foundation
 
-The next development target is:
+- Tool registry and planner awareness.
+- Plan-driven orchestration.
+- Policy-driven approvals.
+- QA repair attempt auditing.
+- Client profile rules/defaults.
+- Reusable asset modules.
+- Experimental specialist tool contracts.
+- Production smoke test and v3 runbook.
 
-```text
-v2.1 - Tool Registry and Planner Awareness
-```
-
-Do not build large numbers of specialist tools before the runtime registry and planner awareness are in place.
+The next product work is to promote specialist tools one by one from `registry/tools.experimental.json` into active workflows after each has a workflow ID, dry-run test, credential check, and limited live test.

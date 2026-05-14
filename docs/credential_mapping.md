@@ -2,6 +2,8 @@
 
 This system uses n8n credentials only. Do not create env files and do not commit secrets or API keys to this repository.
 
+`AI_AGENT_WEBHOOK_AUTH` must be replaced with a permanent operator-controlled value before real production use. Temporary build/test tokens are acceptable only for sandbox smoke tests.
+
 ## Required n8n credentials
 
 | Credential name | n8n credential type | Used by |
@@ -35,3 +37,11 @@ These values can be edited in n8n node settings or passed in payloads where supp
 | `tool_content_generation` | no | yes | yes | no |
 | `tool_qa_delivery` | no | yes | yes | yes |
 | `tool_logging` | no | yes | no | no |
+
+## GitHub smoke-test secrets
+
+The manual production smoke GitHub Action also needs repository secrets:
+
+- `N8N_BASE_URL`
+- `N8N_API_KEY`
+- `AI_AGENT_WEBHOOK_AUTH`

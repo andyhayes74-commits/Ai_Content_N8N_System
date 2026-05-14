@@ -2,7 +2,7 @@
 
 **Reference:** `docs/system_source_of_truth.md`  
 **Purpose:** Define the development plan for taking the current activated v1 pipeline to the finished modular product described in the source-of-truth brief.  
-**Status:** Planning document
+**Status:** Historical planning document. The v2 plan has now been implemented through the v3 platform foundation; use `README.md` and `docs/v3_production_runbook.md` for current operations.
 
 ---
 
@@ -398,4 +398,3 @@ v2.1 - Tool Registry and Planner Awareness
 ```
 
 Do not start by building many new tools. Build the registry and planner awareness first. This creates the foundation for every later phase.
-

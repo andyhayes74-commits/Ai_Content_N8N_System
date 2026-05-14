@@ -3,7 +3,9 @@
 Audit date: 2026-05-05.
 
 ## Status
-This branch is now a credentials-ready, database-backed release candidate for sandbox import testing. It is not production-tested yet.
+Historical note: this audit describes the older v1.0 release-candidate branch. The current repo has since advanced to the v3 production-ready platform foundation. Use `README.md`, `docs/current_baseline.md`, and `docs/v3_production_runbook.md` for current operating status.
+
+This branch was a credentials-ready, database-backed release candidate for sandbox import testing. It was not production-tested at the time of this audit.
 
 ## Implemented
 - Real job creation through `create_content_job` and `api_create_job`.

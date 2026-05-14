@@ -1,5 +1,7 @@
 # Codex Audit Repair Plan
 
+Historical note: this repair plan documents earlier pre-v3 hardening work. The current v3 operating status is documented in `README.md`, `docs/current_baseline.md`, and `docs/v3_production_runbook.md`.
+
 ## Purpose
 
 This document tracks remediation work for the Codex audit performed against merge baseline `b4241b1`.
