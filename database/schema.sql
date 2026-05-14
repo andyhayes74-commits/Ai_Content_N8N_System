@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS client_profiles (
   preferred_tone TEXT,
   industry TEXT,
   compliance_notes TEXT,
+  brand_voice JSONB NOT NULL DEFAULT '{}'::jsonb,
+  tone_rules JSONB NOT NULL DEFAULT '[]'::jsonb,
+  approved_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+  forbidden_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+  product_families JSONB NOT NULL DEFAULT '[]'::jsonb,
+  output_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+  default_approval_policy TEXT NOT NULL DEFAULT 'full_staged',
+  asset_roots JSONB NOT NULL DEFAULT '[]'::jsonb,
+  delivery_preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

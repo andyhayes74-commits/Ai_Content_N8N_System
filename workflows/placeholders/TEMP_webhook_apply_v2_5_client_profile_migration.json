@@ -1,0 +1,90 @@
+{
+  "name": "TEMP_webhook_apply_v2_5_client_profile_migration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "temp/apply-v2-5-client-profile-migration",
+        "responseMode": "lastNode",
+        "authentication": "headerAuth"
+      },
+      "id": "migration-webhook",
+      "name": "Migration Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AI_AGENT_WEBHOOK_AUTH",
+          "name": "AI_AGENT_WEBHOOK_AUTH"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Non-breaking v2.5 client profile rules.\n\nALTER TABLE client_profiles\n  ADD COLUMN IF NOT EXISTS brand_voice JSONB NOT NULL DEFAULT '{}'::jsonb,\n  ADD COLUMN IF NOT EXISTS tone_rules JSONB NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS approved_claims JSONB NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS forbidden_claims JSONB NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS product_families JSONB NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS output_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,\n  ADD COLUMN IF NOT EXISTS default_approval_policy TEXT NOT NULL DEFAULT 'full_staged',\n  ADD COLUMN IF NOT EXISTS asset_roots JSONB NOT NULL DEFAULT '[]'::jsonb,\n  ADD COLUMN IF NOT EXISTS delivery_preferences JSONB NOT NULL DEFAULT '{}'::jsonb;\n\nUPDATE client_profiles\nSET default_approval_policy = 'full_staged'\nWHERE default_approval_policy IS NULL OR default_approval_policy = '';\n\nSELECT true AS migration_applied, 'v2.5_client_profile_rules' AS migration;"
+      },
+      "id": "apply-migration",
+      "name": "Apply v2.5 Client Profile Migration",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Return Migration Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Migration Webhook": {
+      "main": [
+        [
+          {
+            "node": "Apply v2.5 Client Profile Migration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply v2.5 Client Profile Migration": {
+      "main": [
+        [
+          {
+            "node": "Return Migration Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "id": "TEMP_webhook_apply_v2_5_client_profile_migration"
+}
