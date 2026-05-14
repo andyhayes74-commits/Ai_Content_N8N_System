@@ -148,7 +148,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='final_delivery' AND decision='approved' AND reviewer_type='human') AS final_human_approved,\n  '{{$json.job_id}}' AS job_id,\n  '{{$json.mode}}' AS mode,\n  ('{{$json.mode}}'='live') AS live_mode;"
+        "query": "WITH job AS (\n  SELECT id, COALESCE(approval_policy,'full_staged') AS approval_policy\n  FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid\n)\nSELECT CASE\n    WHEN (SELECT approval_policy FROM job) IN ('none','qa_only') THEN true\n    ELSE EXISTS (SELECT 1 FROM content_approvals WHERE job_id=(SELECT id FROM job) AND approval_stage='final_delivery' AND decision='approved' AND reviewer_type='human')\n  END AS final_human_approved,\n  '{{$json.job_id}}' AS job_id,\n  '{{$json.mode}}' AS mode,\n  ('{{$json.mode}}'='live') AS live_mode,\n  (SELECT approval_policy FROM job) AS approval_policy;"
       },
       "credentials": {
         "postgres": {
@@ -191,7 +191,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH outputs AS (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object('output_type', output_type, 'title', title, 'qa_status', qa_status, 'structured_data', structured_data) ORDER BY created_at), '[]'::jsonb) AS included_outputs\n  FROM content_outputs WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND output_type <> 'delivery_pack'\n), pack AS (\n  INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status, drive_file_id)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid, 'delivery_pack', 'Human-approved delivery pack', jsonb_build_object('delivery_ready',true,'generated_after_human_approval',true,'included_outputs',(SELECT included_outputs FROM outputs),'drive_upload_response',COALESCE(NULLIF('{{$json.id}}',''),'')), 'passed', NULLIF('{{$json.id}}',''))\n  RETURNING id\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid,'delivery_pack_ready','Delivery pack created after final human approval',jsonb_build_object('delivery_pack_id',(SELECT id FROM pack)))\n)\nUPDATE content_jobs SET status='delivery_ready', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'delivery_ready' AS status, (SELECT id::text FROM pack) AS delivery_pack_id;"
+        "query": "WITH outputs AS (\n  SELECT COALESCE(jsonb_agg(jsonb_build_object('output_type', output_type, 'title', title, 'qa_status', qa_status, 'structured_data', structured_data) ORDER BY created_at), '[]'::jsonb) AS included_outputs\n  FROM content_outputs WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND output_type <> 'delivery_pack'\n), drive AS (\n  SELECT NULLIF(NULLIF('{{$json.id}}','undefined'),'') AS drive_file_id\n), pack AS (\n  INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status, drive_file_id)\n  VALUES (\n    NULLIF('{{$json.job_id}}','')::uuid,\n    'delivery_pack',\n    'Delivery pack',\n    jsonb_build_object(\n      'delivery_ready', true,\n      'generated_after_human_approval', true,\n      'included_outputs', (SELECT included_outputs FROM outputs),\n      'drive_upload_response', COALESCE((SELECT drive_file_id FROM drive), ''),\n      'drive_upload_skipped', (SELECT drive_file_id FROM drive) IS NULL\n    ),\n    'passed',\n    (SELECT drive_file_id FROM drive)\n  )\n  RETURNING id\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  VALUES (NULLIF('{{$json.job_id}}','')::uuid,'delivery_pack_ready','Delivery pack created',jsonb_build_object('delivery_pack_id',(SELECT id FROM pack),'drive_upload_skipped',(SELECT drive_file_id FROM drive) IS NULL))\n), job_update AS (\n  UPDATE content_jobs SET status='delivery_ready', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid RETURNING id\n)\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'delivery_ready' AS status, (SELECT id::text FROM pack) AS delivery_pack_id;"
       },
       "credentials": {
         "postgres": {
@@ -264,6 +264,26 @@
       ],
       "parameters": {
         "jsCode": "const base = $node['Normalize And Auth'].json;\nconst results = [...(base.tool_results || []), {tool: 'tool_qa_delivery', status: 'waiting_for_human_review', reason: 'final human approval is required before delivery pack'}];\nreturn [{json: {...base, status: 'waiting_for_human_review', gate_blocked: true, gate_reason: 'final human approval is required before delivery pack', tool_results: results}}];"
+      }
+    },
+    {
+      "id": "7b",
+      "name": "Should Upload Delivery Pack",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.live_mode}}",
+              "value2": true
+            }
+          ]
+        }
       }
     }
   ],
@@ -385,7 +405,7 @@
       "main": [
         [
           {
-            "node": "Generate Delivery Pack Metadata",
+            "node": "Should Upload Delivery Pack",
             "type": "main",
             "index": 0
           }
@@ -415,6 +435,24 @@
         [
           {
             "node": "Return QA Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Upload Delivery Pack": {
+      "main": [
+        [
+          {
+            "node": "Generate Delivery Pack Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Delivery Ready",
             "type": "main",
             "index": 0
           }

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS content_jobs (
   requested_outputs JSONB NOT NULL DEFAULT '[]'::jsonb,
   status job_status NOT NULL DEFAULT 'created',
   human_approval_required BOOLEAN NOT NULL DEFAULT true,
+  approval_policy TEXT NOT NULL DEFAULT 'full_staged',
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

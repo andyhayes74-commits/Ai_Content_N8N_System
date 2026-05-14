@@ -71,7 +71,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH gate AS (\n  SELECT EXISTS (SELECT 1 FROM content_approvals WHERE job_id=NULLIF('{{$json.job_id}}','')::uuid AND approval_stage='plan' AND decision='approved') AS allowed\n), job_update AS (\n  UPDATE content_jobs SET status='generating_outputs', updated_at=now()\n  WHERE id=NULLIF('{{$json.job_id}}','')::uuid AND (SELECT allowed FROM gate)\n  RETURNING id\n)\nSELECT (SELECT allowed FROM gate) AS allowed, '{{$json.job_id}}' AS job_id, '{{$json.mode}}' AS mode, ('{{$json.mode}}'='live') AS live_mode;"
+        "query": "WITH job AS (\n  SELECT id, COALESCE(approval_policy,'full_staged') AS approval_policy\n  FROM content_jobs WHERE id=NULLIF('{{$json.job_id}}','')::uuid\n), gate AS (\n  SELECT CASE\n    WHEN (SELECT approval_policy FROM job) IN ('none','qa_only','operator_final','client_review_required') THEN true\n    ELSE EXISTS (SELECT 1 FROM content_approvals WHERE job_id=(SELECT id FROM job) AND approval_stage='plan' AND decision='approved')\n  END AS allowed\n), job_update AS (\n  UPDATE content_jobs SET status='generating_outputs', updated_at=now()\n  WHERE id=(SELECT id FROM job) AND (SELECT allowed FROM gate)\n  RETURNING id\n)\nSELECT (SELECT allowed FROM gate) AS allowed, '{{$json.job_id}}' AS job_id, '{{$json.mode}}' AS mode, ('{{$json.mode}}'='live') AS live_mode, (SELECT approval_policy FROM job) AS approval_policy;"
       },
       "credentials": {
         "postgres": {
