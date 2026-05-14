@@ -2,26 +2,66 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AI Content Tool Registry",
   "type": "object",
-  "required": ["version", "active_workflow_count", "tools"],
+  "additionalProperties": false,
+  "required": ["version", "status", "tools"],
   "properties": {
     "version": {"type": "string"},
-    "active_workflow_count": {"type": "integer", "minimum": 1, "maximum": 14},
+    "generated_from": {"type": "string"},
+    "status": {"type": "string"},
     "tools": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["workflow", "purpose", "input_contract", "output_contract", "tables_touched", "required_credentials", "approval_gates", "agent_safe", "human_only"],
-        "properties": {
-          "workflow": {"type": "string"},
-          "purpose": {"type": "string"},
-          "input_contract": {"type": "object"},
-          "output_contract": {"type": "object"},
-          "tables_touched": {"type": "array", "items": {"type": "string"}},
-          "required_credentials": {"type": "array", "items": {"type": "string"}},
-          "approval_gates": {"type": "array", "items": {"type": "string"}},
-          "agent_safe": {"type": "boolean"},
-          "human_only": {"type": "boolean"}
-        }
+      "items": {"$ref": "#/$defs/tool"}
+    }
+  },
+  "$defs": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool_id",
+        "workflow_name",
+        "version",
+        "status",
+        "category",
+        "description",
+        "capabilities",
+        "input_contract",
+        "output_contract",
+        "required_credentials",
+        "required_tables",
+        "approval_policy",
+        "agent_safe",
+        "human_only",
+        "can_run_in_dry_run",
+        "cost_level",
+        "average_runtime",
+        "failure_mode",
+        "tags"
+      ],
+      "properties": {
+        "tool_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "workflow_name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "version": {"type": "string"},
+        "status": {"enum": ["active", "disabled", "experimental", "deprecated"]},
+        "category": {"type": "string"},
+        "description": {"type": "string", "minLength": 10},
+        "capabilities": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+        "input_contract": {"$ref": "#/$defs/stringMap"},
+        "output_contract": {"$ref": "#/$defs/stringMap"},
+        "required_credentials": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "required_tables": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "approval_policy": {"type": "string"},
+        "agent_safe": {"type": "boolean"},
+        "human_only": {"type": "boolean"},
+        "can_run_in_dry_run": {"type": "boolean"},
+        "cost_level": {"enum": ["none", "low", "medium", "high"]},
+        "average_runtime": {"enum": ["short", "medium", "long"]},
+        "failure_mode": {"enum": ["recoverable", "retryable", "requires_human", "blocked_missing_input", "fatal"]},
+        "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       }
     }
   }

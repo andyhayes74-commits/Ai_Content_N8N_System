@@ -47,18 +47,24 @@ if [ "$archived_count" -lt 35 ]; then
   exit 1
 fi
 
-for f in schemas/*.json examples/*.json tests/payloads/*.json; do
+for f in schemas/*.json examples/*.json tests/payloads/*.json registry/*.json; do
   "$PYTHON_BIN" -m json.tool "$f" >/dev/null
 done
 
 test ! -f .env.example
 test -f docs/tool_registry.md
 test -f docs/deployment_model.md
+test -f docs/system_source_of_truth.md
+test -f docs/v2_development_plan.md
+test -f docs/v2_build_roadmap.md
 test -f schemas/tool_registry.schema.json
 test -f examples/tool_registry.example.json
+test -f registry/tools.active.json
+test -f registry/infrastructure_workflows.json
 test -f scripts/deploy-n8n-workflows.mjs
 node --check scripts/deploy-n8n-workflows.mjs >/dev/null
 
+"$PYTHON_BIN" scripts/validate_tool_registry.py >/dev/null
 "$PYTHON_BIN" scripts/static_workflow_audit.py >/dev/null
 "$PYTHON_BIN" scripts/pre_n8n_readiness_check.py >/dev/null
 DRY_RUN=true node scripts/deploy-n8n-workflows.mjs >/dev/null

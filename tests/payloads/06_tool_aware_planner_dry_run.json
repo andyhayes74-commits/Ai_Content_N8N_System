@@ -1,0 +1,18 @@
+{
+  "action": "generate_plan",
+  "mode": "dry_run",
+  "job_id": "00000000-0000-0000-0000-000000000000",
+  "requested_outputs": ["social_posts", "email_copy"],
+  "request_analysis": {
+    "summary": "Dry-run request for a small content package.",
+    "risks": [],
+    "missing_inputs": []
+  },
+  "asset_index": {
+    "status": "dry_run"
+  },
+  "client_profile": {
+    "client_name": "Demo Fitness Co",
+    "default_approval_policy": "full_staged"
+  }
+}

@@ -1,0 +1,335 @@
+{
+  "version": "2.1.0",
+  "generated_from": "docs/system_source_of_truth.md",
+  "status": "active_tools_runtime_context",
+  "tools": [
+    {
+      "tool_id": "tool_job_intake",
+      "workflow_name": "tool_job_intake",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "job_management",
+      "description": "Creates or updates a tracked content job and records the inbound brief message.",
+      "capabilities": [
+        "create_content_job",
+        "update_content_job",
+        "record_job_message",
+        "start_audit_trail"
+      ],
+      "input_contract": {
+        "external_job_ref": "string optional",
+        "project_name": "string",
+        "brief_text": "string",
+        "requested_outputs": "array optional",
+        "drive_folder_id": "string optional",
+        "mode": "dry_run|live"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "intake_complete"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "job_messages",
+        "content_events"
+      ],
+      "approval_policy": "none",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "low",
+      "average_runtime": "short",
+      "failure_mode": "recoverable",
+      "tags": [
+        "intake",
+        "job",
+        "audit"
+      ]
+    },
+    {
+      "tool_id": "tool_drive_assets",
+      "workflow_name": "tool_drive_assets",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "asset_context",
+      "description": "Creates or indexes Drive asset context and stores an asset index output for a job.",
+      "capabilities": [
+        "index_drive_assets",
+        "prepare_asset_context",
+        "create_asset_index"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "drive_folder_id": "string optional",
+        "mode": "dry_run|live"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "assets_parsed",
+        "asset_index": "object"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "GOOGLE_DRIVE_AI_CONTENT"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "content_assets",
+        "content_outputs"
+      ],
+      "approval_policy": "none",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "low",
+      "average_runtime": "short",
+      "failure_mode": "recoverable",
+      "tags": [
+        "assets",
+        "drive",
+        "context"
+      ]
+    },
+    {
+      "tool_id": "tool_request_analysis",
+      "workflow_name": "tool_request_analysis",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "analysis",
+      "description": "Analyses the client request and records structured request analysis.",
+      "capabilities": [
+        "analyse_request",
+        "identify_requirements",
+        "identify_risks"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "mode": "dry_run|live",
+        "fallback_payload": "object optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "output_type": "request_analysis",
+        "status": "waiting_for_analysis_approval"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "content_outputs",
+        "content_events",
+        "content_errors"
+      ],
+      "approval_policy": "opens_analysis_gate",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "analysis",
+        "llm",
+        "approval"
+      ]
+    },
+    {
+      "tool_id": "tool_content_planning",
+      "workflow_name": "tool_content_planning",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "planning",
+      "description": "Creates a content/tool execution plan after analysis approval using request and registry context.",
+      "capabilities": [
+        "create_content_plan",
+        "select_registered_tools",
+        "record_missing_capabilities",
+        "define_execution_order"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "mode": "dry_run|live",
+        "available_tools": "array",
+        "request_analysis": "object optional",
+        "client_profile": "object optional",
+        "asset_index": "object optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "output_type": "tool_execution_plan",
+        "selected_tools": "array",
+        "execution_order": "array",
+        "missing_capabilities": "array",
+        "approval_policy": "string"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "content_outputs",
+        "content_approvals",
+        "content_events",
+        "content_errors"
+      ],
+      "approval_policy": "opens_plan_gate",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "planning",
+        "registry",
+        "llm"
+      ]
+    },
+    {
+      "tool_id": "tool_content_generation",
+      "workflow_name": "tool_content_generation",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "content_generation",
+      "description": "Generates requested content outputs from the approved plan. Transitional broad generation tool.",
+      "capabilities": [
+        "generate_campaign_plan",
+        "generate_social_posts",
+        "generate_email_copy",
+        "generate_blog_article",
+        "generate_image_prompts",
+        "generate_video_scripts"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "requested_outputs": "array optional",
+        "mode": "dry_run|live",
+        "fallback_payload": "object optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "generated_outputs": "array"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "content_tasks",
+        "content_outputs",
+        "content_approvals",
+        "content_events",
+        "content_errors"
+      ],
+      "approval_policy": "requires_plan_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "recoverable",
+      "tags": [
+        "generation",
+        "transitional",
+        "llm"
+      ]
+    },
+    {
+      "tool_id": "tool_qa_delivery",
+      "workflow_name": "tool_qa_delivery",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "qa_delivery",
+      "description": "Runs QA, opens final human review, and creates delivery pack metadata after final approval.",
+      "capabilities": [
+        "qa_outputs",
+        "record_human_review_gate",
+        "create_delivery_pack_metadata"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "mode": "dry_run|live",
+        "final_approval": "object optional"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "waiting_for_human_review|delivery_ready",
+        "qa_report": "object optional",
+        "delivery_pack": "object optional"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "AI_LLM_HTTP_AUTH",
+        "GOOGLE_DRIVE_AI_CONTENT"
+      ],
+      "required_tables": [
+        "content_jobs",
+        "content_outputs",
+        "content_approvals",
+        "content_events",
+        "content_errors"
+      ],
+      "approval_policy": "requires_final_human_approval",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "medium",
+      "average_runtime": "medium",
+      "failure_mode": "requires_human",
+      "tags": [
+        "qa",
+        "delivery",
+        "approval"
+      ]
+    },
+    {
+      "tool_id": "tool_logging",
+      "workflow_name": "tool_logging",
+      "version": "1.0.0",
+      "status": "active",
+      "category": "audit",
+      "description": "Records progress and error events for job audit and recovery.",
+      "capabilities": [
+        "log_progress_event",
+        "log_error_event",
+        "record_recovery_action"
+      ],
+      "input_contract": {
+        "job_id": "uuid",
+        "action": "log_progress|report_error|retry|pause|resume|cancel",
+        "payload": "object optional",
+        "mode": "dry_run|live"
+      },
+      "output_contract": {
+        "job_id": "uuid",
+        "status": "logged"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB"
+      ],
+      "required_tables": [
+        "content_events",
+        "content_errors"
+      ],
+      "approval_policy": "none",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": true,
+      "cost_level": "low",
+      "average_runtime": "short",
+      "failure_mode": "recoverable",
+      "tags": [
+        "logging",
+        "audit",
+        "recovery"
+      ]
+    }
+  ]
+}
