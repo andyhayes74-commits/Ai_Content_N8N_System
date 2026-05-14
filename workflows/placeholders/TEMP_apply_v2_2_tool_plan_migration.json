@@ -1,0 +1,53 @@
+{
+  "name": "TEMP_apply_v2_2_tool_plan_migration",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Non-breaking v2.2 tables for plan-driven orchestration and tool run tracking.\n\nCREATE TABLE IF NOT EXISTS content_job_tool_plans (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  source_output_id UUID REFERENCES content_outputs(id) ON DELETE SET NULL,\n  plan_version INT NOT NULL DEFAULT 1,\n  status TEXT NOT NULL DEFAULT 'active',\n  selected_tools JSONB NOT NULL DEFAULT '[]'::jsonb,\n  execution_order JSONB NOT NULL DEFAULT '[]'::jsonb,\n  missing_inputs JSONB NOT NULL DEFAULT '[]'::jsonb,\n  missing_capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,\n  approval_policy TEXT NOT NULL DEFAULT 'full_staged',\n  plan_payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS content_job_tool_runs (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  plan_id UUID REFERENCES content_job_tool_plans(id) ON DELETE SET NULL,\n  tool_id TEXT NOT NULL,\n  workflow_name TEXT NOT NULL,\n  step_number INT,\n  status TEXT NOT NULL DEFAULT 'queued',\n  input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  error_message TEXT,\n  failure_mode TEXT,\n  retry_count INT NOT NULL DEFAULT 0,\n  started_at TIMESTAMPTZ,\n  completed_at TIMESTAMPTZ,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE INDEX IF NOT EXISTS idx_tool_plans_job_status ON content_job_tool_plans(job_id, status);\nCREATE INDEX IF NOT EXISTS idx_tool_runs_job_status ON content_job_tool_runs(job_id, status);\n\n\nSELECT true AS migration_applied, 'v2.2_tool_plans_and_runs' AS migration;"
+      },
+      "id": "apply-migration",
+      "name": "Apply v2.2 Tool Plan Migration",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Apply v2.2 Tool Plan Migration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
