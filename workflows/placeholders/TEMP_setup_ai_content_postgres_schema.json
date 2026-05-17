@@ -1,0 +1,84 @@
+{
+  "name": "TEMP_setup_ai_content_postgres_schema",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- AI Content n8n System v1.0 RC schema\n\nCREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\nDO $$\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN\n    CREATE TYPE job_status AS ENUM (\n      'created','intake_complete','assets_scanning','assets_parsed','analysis_complete',\n      'waiting_for_analysis_approval','waiting_for_plan_approval','generating_outputs',\n      'qa_in_progress','waiting_for_human_review','delivery_ready','completed','failed','paused','cancelled'\n    );\n  END IF;\nEND$$;\n\nCREATE TABLE IF NOT EXISTS client_profiles (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  client_code TEXT UNIQUE NOT NULL,\n  client_name TEXT NOT NULL,\n  preferred_tone TEXT,\n  industry TEXT,\n  compliance_notes TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS content_jobs (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  external_job_ref TEXT UNIQUE,\n  client_profile_id UUID REFERENCES client_profiles(id),\n  project_name TEXT NOT NULL,\n  brief_text TEXT NOT NULL,\n  drive_root_folder_id TEXT,\n  drive_root_folder_path TEXT,\n  requested_outputs JSONB NOT NULL DEFAULT '[]'::jsonb,\n  status job_status NOT NULL DEFAULT 'created',\n  human_approval_required BOOLEAN NOT NULL DEFAULT true,\n  created_by TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  completed_at TIMESTAMPTZ\n);\n\nCREATE TABLE IF NOT EXISTS content_assets (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  source_type TEXT NOT NULL,\n  drive_file_id TEXT,\n  file_name TEXT NOT NULL,\n  mime_type TEXT,\n  file_size_bytes BIGINT,\n  parse_status TEXT NOT NULL DEFAULT 'queued',\n  extracted_text TEXT,\n  extracted_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS content_tasks (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  task_type TEXT NOT NULL,\n  task_key TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'queued',\n  input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  retry_count INT NOT NULL DEFAULT 0,\n  max_retries INT NOT NULL DEFAULT 3,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  UNIQUE(job_id, task_key)\n);\n\nCREATE TABLE IF NOT EXISTS content_outputs (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  task_id UUID REFERENCES content_tasks(id),\n  output_type TEXT NOT NULL,\n  version INT NOT NULL DEFAULT 1,\n  title TEXT NOT NULL,\n  body_markdown TEXT,\n  structured_data JSONB NOT NULL DEFAULT '{}'::jsonb,\n  source_fact_map JSONB NOT NULL DEFAULT '[]'::jsonb,\n  qa_status TEXT NOT NULL DEFAULT 'pending',\n  drive_file_id TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS content_events (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  event_type TEXT NOT NULL,\n  status_from job_status,\n  status_to job_status,\n  message TEXT NOT NULL,\n  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS content_errors (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  task_id UUID REFERENCES content_tasks(id),\n  severity TEXT NOT NULL,\n  error_code TEXT NOT NULL,\n  error_message TEXT NOT NULL,\n  recoverable BOOLEAN NOT NULL DEFAULT true,\n  stack_trace TEXT,\n  context JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  resolved_at TIMESTAMPTZ\n);\n\nCREATE TABLE IF NOT EXISTS content_approvals (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  approval_stage TEXT NOT NULL,\n  decision TEXT NOT NULL,\n  reviewer_id TEXT NOT NULL,\n  reviewer_type TEXT NOT NULL DEFAULT 'human',\n  reviewer_notes TEXT,\n  decided_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS job_messages (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,\n  sender_type TEXT NOT NULL,\n  sender_id TEXT,\n  message_type TEXT NOT NULL,\n  message_text TEXT,\n  attachments JSONB NOT NULL DEFAULT '[]'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE INDEX IF NOT EXISTS idx_jobs_status ON content_jobs(status);\nCREATE INDEX IF NOT EXISTS idx_tasks_job_status ON content_tasks(job_id, status);\nCREATE INDEX IF NOT EXISTS idx_outputs_job_type ON content_outputs(job_id, output_type);\nCREATE INDEX IF NOT EXISTS idx_events_job_created ON content_events(job_id, created_at DESC);\nCREATE INDEX IF NOT EXISTS idx_errors_job_created ON content_errors(job_id, created_at DESC);\n"
+      },
+      "id": "create-schema",
+      "name": "Create AI Content Tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        260,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO client_profiles (client_code, client_name, preferred_tone, industry, compliance_notes)\nVALUES\n('demo-fitness', 'Demo Fitness Co', 'motivational, concise', 'fitness', 'No medical claims without source.'),\n('demo-saas', 'Demo SaaS Labs', 'clear, practical', 'software', 'Avoid guarantee language.')\nON CONFLICT (client_code) DO NOTHING;\n"
+      },
+      "id": "seed-reference-data",
+      "name": "Seed Demo Client Profiles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        520,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create AI Content Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AI Content Tables": {
+      "main": [
+        [
+          {
+            "node": "Seed Demo Client Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

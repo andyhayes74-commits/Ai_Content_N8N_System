@@ -1,0 +1,20 @@
+{
+  "version": "2.1.0",
+  "workflows": [
+    {
+      "workflow_name": "ai_content_orchestrator",
+      "role": "execution_orchestrator",
+      "planner_selectable": false
+    },
+    {
+      "workflow_name": "api_supervisor_gateway",
+      "role": "api_gateway",
+      "planner_selectable": false
+    },
+    {
+      "workflow_name": "api_human_review_gateway",
+      "role": "human_review_gateway",
+      "planner_selectable": false
+    }
+  ]
+}

@@ -211,6 +211,95 @@ async function checkedRequest(options, secrets) {
   return result.data;
 }
 
+async function listCredentials({ baseUrl, apiKey, secrets }) {
+  const result = await fetch(`${baseUrl}/api/v1/credentials?limit=250`, {
+    method: 'GET',
+    headers: {
+      'X-N8N-API-KEY': apiKey,
+      'Content-Type': 'application/json',
+    },
+  });
+  const text = await result.text();
+  let data = undefined;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+  if (!result.ok) {
+    throw new Error(
+      `GET /credentials failed with HTTP ${result.status} ${result.statusText}: ${redactSecrets(
+        text || JSON.stringify(data ?? ''),
+        secrets,
+      )}`,
+    );
+  }
+  return data?.data ?? data ?? [];
+}
+
+function applyCredentialIds(payload, credentials) {
+  const credentialsByName = new Map(credentials.map((credential) => [credential.name, credential]));
+  const missing = new Map();
+  let updated = 0;
+
+  for (const node of payload.nodes) {
+    if (!node.credentials || typeof node.credentials !== 'object') {
+      continue;
+    }
+
+    for (const [credentialType, reference] of Object.entries(node.credentials)) {
+      if (!reference || typeof reference !== 'object' || !reference.name) {
+        continue;
+      }
+
+      const credential = credentialsByName.get(reference.name);
+      if (!credential) {
+        missing.set(reference.name, credentialType);
+        continue;
+      }
+
+      if (credential.id && reference.id !== credential.id) {
+        reference.id = credential.id;
+        updated += 1;
+      }
+    }
+  }
+
+  return {
+    updated,
+    missing: [...missing.entries()].map(([name, type]) => ({ name, type })),
+  };
+}
+
+function applyExecuteWorkflowIds(payload, workflowIdMap) {
+  let updated = 0;
+  const missing = new Set();
+
+  for (const node of payload.nodes) {
+    if (node.type !== 'n8n-nodes-base.executeWorkflow') {
+      continue;
+    }
+
+    const workflowRef = node.parameters?.workflowId;
+    if (typeof workflowRef !== 'string' || !workflowRef) {
+      continue;
+    }
+
+    const workflowId = getWorkflowId(workflowRef, workflowIdMap);
+    if (!workflowId) {
+      missing.add(workflowRef);
+      continue;
+    }
+
+    node.parameters.workflowId = workflowId;
+    updated += 1;
+  }
+
+  return { updated, missing: [...missing] };
+}
+
 function formatFailedRequest(method, result, secrets) {
   return `${method} update failed with HTTP ${result.response.status} ${result.response.statusText}: ${redactSecrets(
     result.text || JSON.stringify(result.data ?? ''),
@@ -280,9 +369,29 @@ async function main() {
   const baseUrl = normalizeBaseUrl(requireEnv('N8N_BASE_URL'));
   const apiKey = requireEnv('N8N_API_KEY');
   const secrets = [apiKey];
+  const credentials = await listCredentials({ baseUrl, apiKey, secrets });
 
   for (const { item, workflowId, payload } of prepared) {
     const name = item.workflow.name;
+    const credentialResolution = applyCredentialIds(payload, credentials);
+    if (credentialResolution.missing.length > 0) {
+      const missing = credentialResolution.missing.map(({ name: credentialName, type }) => `${credentialName} (${type})`);
+      throw new Error(`Missing n8n credential(s) required by ${name}: ${missing.join(', ')}`);
+    }
+    if (credentialResolution.updated > 0) {
+      console.log(`Resolved ${credentialResolution.updated} credential reference(s) for ${name}.`);
+    }
+
+    const workflowReferenceResolution = applyExecuteWorkflowIds(payload, workflowIdMap);
+    if (workflowReferenceResolution.missing.length > 0) {
+      throw new Error(
+        `Missing n8n workflow ID mapping for Execute Workflow reference(s) in ${name}: ${workflowReferenceResolution.missing.join(', ')}`,
+      );
+    }
+    if (workflowReferenceResolution.updated > 0) {
+      console.log(`Resolved ${workflowReferenceResolution.updated} workflow reference(s) for ${name}.`);
+    }
+
     let existingWorkflow;
     try {
       existingWorkflow = await checkedRequest({ baseUrl, workflowId, apiKey, method: 'GET' }, secrets);

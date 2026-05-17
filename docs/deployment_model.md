@@ -53,6 +53,7 @@ Add:
 | `N8N_API_KEY` | yes for live deploy | n8n public API key. |
 | `N8N_WORKFLOW_ID_MAP` | recommended | JSON object mapping local workflow names to existing n8n workflow IDs. |
 | `N8N_DEPLOY_ACTIVE` | no | Optional boolean. Leave unset to preserve current active state. |
+| `AI_AGENT_WEBHOOK_AUTH` | yes for smoke test | Permanent webhook bearer/header value used by `scripts/production_smoke_test.mjs`. |
 
 `N8N_WORKFLOW_ID_MAP` example:
 
@@ -93,8 +94,15 @@ Alternatively, set individual secrets:
 5. Confirm all 10 workflow names and IDs are shown correctly.
 6. Run the same action with `dry_run=false`.
 7. Open n8n and visually inspect the workflows before live sandbox testing.
+8. Run the manual **Production smoke test** action in dry-run mode.
 
 The placeholder files are intentionally minimal and exist only to create stable n8n workflow IDs for first-time deployment. Do not use them as runtime workflows.
+
+## Production smoke workflow
+
+`.github/workflows/production-smoke.yml` runs `scripts/production_smoke_test.mjs`. It creates a dry-run job, generates a stored plan, runs that plan to `delivery_ready`, checks supervisor status, and reads recent n8n executions when `N8N_API_KEY` is available.
+
+Run this after each deploy and before promoting live-mode changes.
 
 ## Backup direction
 
@@ -102,4 +110,4 @@ Future n8n exports can be backed up to GitHub for comparison, but exported runti
 
 ## Rollback
 
-Rollback is available by importing the archived v1 debug build from `workflows/archive/v1_debug_build/`, but the normal active import folder remains `workflows/active/`.
+Preferred rollback is to redeploy the last known good GitHub commit through the deploy action. The archived v1 debug build is a reference fallback only; the normal active import folder remains `workflows/active/`.

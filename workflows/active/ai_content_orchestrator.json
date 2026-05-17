@@ -35,7 +35,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst action = body.action || 'run_lifecycle';\nconst routes = {\n  run_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  dry_run_full_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery'],\n  create_job: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  attach_drive_folder: ['tool_job_intake','tool_drive_assets'],\n  analyse_request: ['tool_request_analysis'],\n  generate_plan: ['tool_content_planning'],\n  generate_outputs: ['tool_content_generation'],\n  qa_delivery: ['tool_qa_delivery'],\n  log_progress: ['tool_logging'],\n  report_error: ['tool_logging'],\n  retry: ['tool_logging'],\n  pause: ['tool_logging'],\n  resume: ['tool_logging'],\n  cancel: ['tool_logging']\n};\nconst desired = routes[action] || routes.run_lifecycle;\nconst lifecycle = ['intake','drive_assets','request_analysis','analysis_approval_gate','content_planning','plan_approval_gate','content_generation','qa_delivery','final_approval_gate','delivery_pack'];\nreturn [{json: {...body, action, mode: body.mode || 'dry_run', desired_tools: desired, lifecycle, current_stage: 'orchestrator_start', payload: body.payload || body, tool_results: [], status: 'orchestrating'}}];"
+        "jsCode": "const body = $json.body ?? $json;\nconst action = body.action || 'run_lifecycle';\nconst routes = {\n  run_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  dry_run_full_lifecycle: ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery'],\n  create_job: ['tool_job_intake','tool_drive_assets','tool_request_analysis'],\n  attach_drive_folder: ['tool_job_intake','tool_drive_assets'],\n  analyse_request: ['tool_request_analysis'],\n  generate_plan: ['tool_content_planning'],\n  run_plan: [],\n  continue_plan: [],\n  generate_outputs: ['tool_content_generation'],\n  qa_delivery: ['tool_qa_delivery'],\n  log_progress: ['tool_logging'],\n  report_error: ['tool_logging'],\n  retry: ['tool_logging'],\n  pause: ['tool_logging'],\n  resume: ['tool_logging'],\n  cancel: ['tool_logging']\n};\nconst desired = routes[action] || routes.run_lifecycle;\nconst lifecycle = ['intake','drive_assets','request_analysis','analysis_approval_gate','content_planning','plan_approval_gate','content_generation','qa_delivery','final_approval_gate','delivery_pack'];\nreturn [{json: {...body, action, mode: body.mode || 'dry_run', desired_tools: desired, lifecycle, current_stage: 'orchestrator_start', payload: body.payload || body, tool_results: [], status: 'orchestrating', plan_driven: ['run_plan','continue_plan'].includes(action)}}];"
       }
     },
     {
@@ -261,6 +261,39 @@
         "responseBody": "={{$json}}",
         "options": {}
       }
+    },
+    {
+      "id": "load_stored_tool_plan",
+      "name": "Load Stored Tool Plan",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        330,
+        -180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH raw AS (\n  SELECT NULLIF(NULLIF('{{$json.job_id}}','undefined'),'') AS job_id_text,\n         ('{{$json.plan_driven}}'='true') AS plan_driven,\n         NULLIF(NULLIF('{{$json.action}}','undefined'),'') AS action,\n         NULLIF(NULLIF('{{$json.mode}}','undefined'),'') AS mode\n), input AS (\n  SELECT CASE WHEN job_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN job_id_text::uuid ELSE NULL::uuid END AS job_uuid,\n         plan_driven,\n         action,\n         mode,\n         job_id_text\n  FROM raw\n), latest_plan AS (\n  SELECT p.id, p.selected_tools, p.execution_order, p.missing_inputs, p.missing_capabilities, p.approval_policy, p.plan_payload\n  FROM content_job_tool_plans p, input i\n  WHERE i.plan_driven AND i.job_uuid IS NOT NULL AND p.job_id=i.job_uuid AND p.status='active'\n  ORDER BY p.created_at DESC\n  LIMIT 1\n), event_insert AS (\n  INSERT INTO content_events (job_id,event_type,message,metadata)\n  SELECT (SELECT job_uuid FROM input), 'plan_loaded', 'Stored tool execution plan loaded', jsonb_build_object('plan_id',(SELECT id FROM latest_plan))\n  WHERE (SELECT plan_driven FROM input) AND EXISTS (SELECT 1 FROM latest_plan)\n)\nSELECT COALESCE((SELECT job_id_text FROM input),'') AS job_id,\n       COALESCE((SELECT action FROM input),'') AS action,\n       COALESCE((SELECT mode FROM input),'') AS mode,\n       (SELECT plan_driven FROM input) AS plan_driven,\n       COALESCE((SELECT id::text FROM latest_plan),'') AS plan_id,\n       COALESCE((SELECT plan_payload::text FROM latest_plan),'{}') AS plan_payload_json,\n       COALESCE((SELECT selected_tools::text FROM latest_plan),'[]') AS selected_tools_json,\n       COALESCE((SELECT approval_policy FROM latest_plan),'full_staged') AS approval_policy;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_AI_CONTENT_DB",
+          "name": "POSTGRES_AI_CONTENT_DB"
+        }
+      }
+    },
+    {
+      "id": "apply_stored_tool_plan",
+      "name": "Apply Stored Tool Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -180
+      ],
+      "parameters": {
+        "jsCode": "const base = $node['Authenticate And Plan Route'].json;\nconst row = $json;\nlet planPayload = {};\nlet selectedTools = [];\nif (base.plan_driven) {\n  try { planPayload = JSON.parse(row.plan_payload_json || '{}'); } catch {}\n  try { selectedTools = JSON.parse(row.selected_tools_json || '[]'); } catch {}\n}\nconst activeToolIds = ['tool_job_intake','tool_drive_assets','tool_request_analysis','tool_content_planning','tool_content_generation','tool_qa_delivery','tool_logging'];\nconst plannedTools = selectedTools.map(tool => tool.tool_id || tool.workflow_name).filter(Boolean);\nconst desired = base.plan_driven ? plannedTools.filter(tool => activeToolIds.includes(tool)) : base.desired_tools;\nconst missingPlan = base.plan_driven && !row.plan_id;\nconst results = missingPlan ? [...(base.tool_results || []), {tool: 'ai_content_orchestrator', status: 'blocked_missing_plan', reason: 'No active stored tool execution plan found'}] : base.tool_results;\nconst output = {...base, desired_tools: desired, missing_plan: missingPlan, status: missingPlan ? 'blocked_missing_plan' : base.status, tool_results: results};\nif (base.plan_driven) {\n  output.plan_id = row.plan_id || base.plan_id;\n  output.approval_policy = row.approval_policy || base.approval_policy;\n  output.tool_execution_plan = planPayload;\n}\nreturn [{json: output}];"
+      }
     }
   ],
   "connections": {
@@ -279,7 +312,7 @@
       "main": [
         [
           {
-            "node": "Call tool_job_intake",
+            "node": "Load Stored Tool Plan",
             "type": "main",
             "index": 0
           }
@@ -357,6 +390,28 @@
         [
           {
             "node": "Return Lifecycle Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Stored Tool Plan": {
+      "main": [
+        [
+          {
+            "node": "Apply Stored Tool Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Stored Tool Plan": {
+      "main": [
+        [
+          {
+            "node": "Call tool_job_intake",
             "type": "main",
             "index": 0
           }

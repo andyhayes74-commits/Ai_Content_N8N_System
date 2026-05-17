@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS client_profiles (
   preferred_tone TEXT,
   industry TEXT,
   compliance_notes TEXT,
+  brand_voice JSONB NOT NULL DEFAULT '{}'::jsonb,
+  tone_rules JSONB NOT NULL DEFAULT '[]'::jsonb,
+  approved_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+  forbidden_claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+  product_families JSONB NOT NULL DEFAULT '[]'::jsonb,
+  output_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+  default_approval_policy TEXT NOT NULL DEFAULT 'full_staged',
+  asset_roots JSONB NOT NULL DEFAULT '[]'::jsonb,
+  delivery_preferences JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -35,6 +44,7 @@ CREATE TABLE IF NOT EXISTS content_jobs (
   requested_outputs JSONB NOT NULL DEFAULT '[]'::jsonb,
   status job_status NOT NULL DEFAULT 'created',
   human_approval_required BOOLEAN NOT NULL DEFAULT true,
+  approval_policy TEXT NOT NULL DEFAULT 'full_staged',
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -54,6 +64,24 @@ CREATE TABLE IF NOT EXISTS content_assets (
   extracted_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS content_asset_modules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_profile_id UUID REFERENCES client_profiles(id) ON DELETE CASCADE,
+  job_id UUID REFERENCES content_jobs(id) ON DELETE SET NULL,
+  module_key TEXT NOT NULL,
+  module_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  compatibility_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  usage_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_files JSONB NOT NULL DEFAULT '[]'::jsonb,
+  generated_assets JSONB NOT NULL DEFAULT '[]'::jsonb,
+  prompt_context JSONB NOT NULL DEFAULT '{}'::jsonb,
+  version INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(client_profile_id, module_key, version)
 );
 
 CREATE TABLE IF NOT EXISTS content_tasks (
@@ -112,6 +140,22 @@ CREATE TABLE IF NOT EXISTS content_errors (
   resolved_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS content_repair_attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
+  output_id UUID REFERENCES content_outputs(id) ON DELETE SET NULL,
+  repair_type TEXT NOT NULL,
+  issue_code TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  attempt_number INT NOT NULL DEFAULT 1,
+  max_attempts INT NOT NULL DEFAULT 2,
+  input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS content_approvals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
@@ -134,8 +178,47 @@ CREATE TABLE IF NOT EXISTS job_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS content_job_tool_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
+  source_output_id UUID REFERENCES content_outputs(id) ON DELETE SET NULL,
+  plan_version INT NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'active',
+  selected_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+  execution_order JSONB NOT NULL DEFAULT '[]'::jsonb,
+  missing_inputs JSONB NOT NULL DEFAULT '[]'::jsonb,
+  missing_capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
+  approval_policy TEXT NOT NULL DEFAULT 'full_staged',
+  plan_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS content_job_tool_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL REFERENCES content_jobs(id) ON DELETE CASCADE,
+  plan_id UUID REFERENCES content_job_tool_plans(id) ON DELETE SET NULL,
+  tool_id TEXT NOT NULL,
+  workflow_name TEXT NOT NULL,
+  step_number INT,
+  status TEXT NOT NULL DEFAULT 'queued',
+  input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  error_message TEXT,
+  failure_mode TEXT,
+  retry_count INT NOT NULL DEFAULT 0,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON content_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_asset_modules_client_status ON content_asset_modules(client_profile_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_job_status ON content_tasks(job_id, status);
 CREATE INDEX IF NOT EXISTS idx_outputs_job_type ON content_outputs(job_id, output_type);
 CREATE INDEX IF NOT EXISTS idx_events_job_created ON content_events(job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_errors_job_created ON content_errors(job_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_repair_attempts_job_status ON content_repair_attempts(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_tool_plans_job_status ON content_job_tool_plans(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_tool_runs_job_status ON content_job_tool_runs(job_id, status);

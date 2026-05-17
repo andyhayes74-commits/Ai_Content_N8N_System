@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The AI Content n8n System runs database-backed AI content jobs through n8n. It accepts a client/job brief, prepares Drive assets, analyzes the request, waits for human approvals, generates content, runs QA, and prepares a final delivery pack.
+The AI Content n8n System runs database-backed AI content jobs through n8n. It accepts a client/job brief, prepares Drive assets, creates a registry-aware execution plan, runs selected tools, performs QA and safe repair auditing, handles policy-driven approvals, and prepares a final delivery pack.
 
 GitHub is the source of truth for workflow JSON. n8n is the runtime.
 
@@ -80,17 +80,29 @@ Postgres is the source of truth for job state.
 Create job
 → Prepare Drive workspace/assets
 → Analyze request
-→ Human approves analysis
+→ Human approves analysis where policy requires it
 → Generate content plan
-→ Human approves plan
+→ Human approves plan where policy requires it
 → Generate outputs
-→ QA review
-→ Human approves final delivery
+→ QA review and safe repair audit
+→ Human approves final delivery where policy requires it
 → Create delivery pack
 → Mark delivery_ready
 ```
 
-The system intentionally stops at approval gates. Content planning, content generation, and delivery pack creation should not continue until the matching approval exists.
+The system stops at approval gates according to job/client policy. Low-risk dry-runs can use `qa_only`; full staged review can use `full_staged`.
+
+## Approval policies
+
+Supported policies:
+
+- `none` - no staged approval in dry-run paths.
+- `qa_only` - run plan and delivery after QA if there are no blocking issues.
+- `operator_final` - lighter early gates, final operator approval still expected.
+- `full_staged` - analysis, plan, and final approval gates.
+- `client_review_required` - preserves client/human review expectations.
+
+Agents cannot impersonate human approval. Human-only final approvals must come through `api_human_review_gateway`.
 
 ## Main webhook entry points
 
@@ -122,7 +134,30 @@ Use:
   "project_name": "Example Content Job",
   "brief_text": "Create a campaign package for a product launch.",
   "requested_outputs": ["campaign_plan", "social_posts", "email_copy"],
-  "drive_folder_id": "optional-existing-drive-folder"
+  "drive_folder_id": "optional-existing-drive-folder",
+  "approval_policy": "qa_only"
+}
+```
+
+You can also send a client profile. If `requested_outputs` is omitted, `client_profile.output_defaults.requested_outputs` can provide the defaults.
+
+```json
+{
+  "action": "create_job",
+  "mode": "dry_run",
+  "external_job_ref": "sandbox-client-001",
+  "project_name": "Client Default Job",
+  "brief_text": "Create content using client defaults.",
+  "drive_folder_id": "optional-existing-drive-folder",
+  "client_profile": {
+    "client_code": "demo_client",
+    "client_name": "Demo Client",
+    "default_approval_policy": "qa_only",
+    "forbidden_claims": ["guaranteed results"],
+    "output_defaults": {
+      "requested_outputs": ["social_posts", "email_copy"]
+    }
+  }
 }
 ```
 
@@ -214,6 +249,16 @@ The content generation workflow can dispatch:
 
 Outputs are stored in `content_outputs`. Generation tasks are tracked in `content_tasks`.
 
+## QA repair audit
+
+QA reports can include structured `issues`. Repairable issues create records in `content_repair_attempts`; blocking issues keep the job in human review. Repair is audited, not hidden.
+
+Use `tests/payloads/07_qa_repair_dry_run.json` as the repair-case payload reference.
+
+## Asset modules
+
+Drive asset indexing can create reusable client asset modules in `content_asset_modules`. The planner receives active asset modules for the client and includes them in `tool_execution_plan.asset_modules`.
+
 ## Delivery pack
 
 The delivery pack is created only after final human approval. It collects stored outputs, records included output metadata, stores Drive upload metadata when available, and marks the job:
@@ -248,6 +293,15 @@ Then run again with:
 
 ```text
 dry_run=false
+```
+
+For the v3 smoke test, run:
+
+```bash
+N8N_BASE_URL="https://n8n.example.com" \
+N8N_API_KEY="..." \
+AI_AGENT_WEBHOOK_AUTH="..." \
+node scripts/production_smoke_test.mjs
 ```
 
 ## Troubleshooting

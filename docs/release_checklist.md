@@ -21,6 +21,8 @@
 ## Sandbox checks
 
 - [ ] Run `tests/payloads/01_orchestrator_dry_run_job.json`.
+- [ ] Run `tests/payloads/07_qa_repair_dry_run.json` after creating a test job and plan.
+- [ ] Run `tests/payloads/08_asset_module_planner_dry_run.json`.
 - [ ] Run supervisor status check.
 - [ ] Run analysis, plan, and final human approval paths.
 - [ ] Run one generation route.
@@ -29,9 +31,11 @@
 
 ## Production readiness
 
+- [ ] Run `node scripts/production_smoke_test.mjs` with `N8N_BASE_URL`, `N8N_API_KEY`, and `AI_AGENT_WEBHOOK_AUTH` supplied by secrets.
 - [ ] Postgres credential execution verified.
 - [ ] Google Drive OAuth actions verified with test folder.
 - [ ] OpenAI/LiteLLM responses verified.
 - [ ] Supervisor callbacks verified.
 - [ ] Notification delivery verified.
 - [ ] Human operator signs off final approval gate behavior.
+- [ ] Confirm `docs/v3_production_runbook.md` rollback and backup steps are current.

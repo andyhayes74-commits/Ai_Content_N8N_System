@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\nconst toolName = 'tool_request_analysis';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\ndelete normalized.skipped_tool;\nconst toolName = 'tool_request_analysis';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
       }
     },
     {
@@ -57,7 +57,7 @@
         260
       ],
       "parameters": {
-        "jsCode": "return [{json: $json}];"
+        "jsCode": "const output = {...$json};\ndelete output.skipped_tool;\nreturn [{json: output}];"
       }
     },
     {
@@ -108,7 +108,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\nSELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'REQUEST_ANALYSIS_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\nWHERE COALESCE('{{$json.parse_warning}}','false') = 'true';"
+        "query": "WITH warning_insert AS (\n  INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'REQUEST_ANALYSIS_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\n  WHERE COALESCE('{{$json.parse_warning}}','false') = 'true'\n  RETURNING id\n)\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.request_analysis_json_sql}}' AS request_analysis_json_sql;"
       },
       "credentials": {
         "postgres": {

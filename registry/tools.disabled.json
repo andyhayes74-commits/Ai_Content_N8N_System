@@ -1,0 +1,46 @@
+{
+  "version": "2.1.0",
+  "status": "disabled_tools_runtime_context",
+  "tools": [
+    {
+      "tool_id": "tool_asset_pre_renderer",
+      "workflow_name": "tool_asset_pre_renderer",
+      "version": "0.1.0",
+      "status": "disabled",
+      "category": "asset_context",
+      "description": "Future tool for preparing reusable client/product asset modules before content jobs.",
+      "capabilities": [
+        "pre_render_asset_modules",
+        "prepare_reusable_prompt_context"
+      ],
+      "input_contract": {
+        "client_id": "string",
+        "asset_root": "string optional",
+        "mode": "dry_run|live"
+      },
+      "output_contract": {
+        "asset_modules": "array"
+      },
+      "required_credentials": [
+        "POSTGRES_AI_CONTENT_DB",
+        "GOOGLE_DRIVE_AI_CONTENT",
+        "AI_LLM_HTTP_AUTH"
+      ],
+      "required_tables": [
+        "content_asset_modules"
+      ],
+      "approval_policy": "operator_final",
+      "agent_safe": true,
+      "human_only": false,
+      "can_run_in_dry_run": false,
+      "cost_level": "medium",
+      "average_runtime": "long",
+      "failure_mode": "recoverable",
+      "tags": [
+        "future",
+        "assets",
+        "modules"
+      ]
+    }
+  ]
+}

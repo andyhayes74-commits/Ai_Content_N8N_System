@@ -846,6 +846,8 @@ Tasks:
 
 ## 17. Near-term Build Priority
 
+Implementation update, 2026-05-14: this near-term build priority has been completed through the v3 platform foundation on branch `codex/finish-ai-content-n8n-system`. The original priority remains here as historical product guidance; current operating instructions live in `docs/v3_production_runbook.md`, `docs/operator_manual.md`, and `README.md`.
+
 The next development target should be:
 
 ```text
