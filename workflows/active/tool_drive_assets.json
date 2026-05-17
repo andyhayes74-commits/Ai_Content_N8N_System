@@ -7,12 +7,14 @@
       "id": "1",
       "name": "Callable Input",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 1.1,
       "position": [
         0,
         0
       ],
-      "parameters": {}
+      "parameters": {
+        "inputSource": "passthrough"
+      }
     },
     {
       "id": "2",
@@ -63,20 +65,23 @@
     {
       "id": "3",
       "name": "Create Project Folder Metadata",
-      "type": "n8n-nodes-base.googleDrive",
+      "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
         440,
         -120
       ],
       "parameters": {
-        "resource": "folder",
-        "operation": "create",
-        "name": "={{$json.project_name || $json.job_id}}",
-        "parents": "={{$json.default_parent_drive_folder_id || $json.drive_folder_id || \"\"}}"
+        "requestMethod": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "responseFormat": "json",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ JSON.stringify((() => { const parent = $json.default_parent_drive_folder_id || $json.drive_folder_id || ''; const body = { name: $json.project_name || $json.job_id, mimeType: 'application/vnd.google-apps.folder' }; if (parent) body.parents = [parent]; return body; })()) }}"
       },
       "credentials": {
-        "googleApi": {
+        "googleDriveOAuth2Api": {
           "id": "GOOGLE_DRIVE_AI_CONTENT",
           "name": "GOOGLE_DRIVE_AI_CONTENT"
         }
@@ -202,7 +207,7 @@
       "main": [
         [
           {
-            "node": "Create Project Folder Metadata",
+            "node": "Persist Asset Index",
             "type": "main",
             "index": 0
           }

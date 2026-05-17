@@ -7,12 +7,14 @@
       "id": "1",
       "name": "Callable Input",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 1.1,
       "position": [
         0,
         0
       ],
-      "parameters": {}
+      "parameters": {
+        "inputSource": "passthrough"
+      }
     },
     {
       "id": "2",
