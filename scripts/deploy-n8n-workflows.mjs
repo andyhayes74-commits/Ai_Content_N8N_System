@@ -331,6 +331,11 @@ async function setActivation({ baseUrl, workflowId, apiKey, active, secrets }) {
   await checkedRequest({ baseUrl, workflowId, apiKey, method: 'POST', path: endpoint }, secrets);
 }
 
+async function republishActiveWorkflow({ baseUrl, workflowId, apiKey, secrets }) {
+  await setActivation({ baseUrl, workflowId, apiKey, active: false, secrets });
+  await setActivation({ baseUrl, workflowId, apiKey, active: true, secrets });
+}
+
 async function main() {
   const dryRun = parseBool(process.env.DRY_RUN, true);
   const activeEnvProvided = process.env.N8N_DEPLOY_ACTIVE !== undefined && process.env.N8N_DEPLOY_ACTIVE !== '';
@@ -407,12 +412,18 @@ async function main() {
     const updatedWorkflow = data?.data ?? data;
     console.log(`Updated ${name} via ${method}: ${updatedWorkflow?.id ?? workflowId}`);
 
+    const updatedActive = updatedWorkflow?.active;
     if (activeOverride !== undefined) {
-      const updatedActive = updatedWorkflow?.active;
       if (updatedActive !== activeOverride) {
         await setActivation({ baseUrl, workflowId, apiKey, active: activeOverride, secrets });
         console.log(`${activeOverride ? 'Activated' : 'Deactivated'} ${name}.`);
+      } else if (activeOverride === true) {
+        await republishActiveWorkflow({ baseUrl, workflowId, apiKey, secrets });
+        console.log(`Republished active workflow ${name}.`);
       }
+    } else if (updatedActive === true) {
+      await republishActiveWorkflow({ baseUrl, workflowId, apiKey, secrets });
+      console.log(`Republished active workflow ${name}.`);
     }
   }
 

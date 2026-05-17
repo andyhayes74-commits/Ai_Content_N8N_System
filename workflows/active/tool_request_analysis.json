@@ -7,12 +7,14 @@
       "id": "1",
       "name": "Callable Input",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 1.1,
       "position": [
         0,
         0
       ],
-      "parameters": {}
+      "parameters": {
+        "inputSource": "passthrough"
+      }
     },
     {
       "id": "2",
@@ -24,7 +26,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\ndelete normalized.skipped_tool;\nconst toolName = 'tool_request_analysis';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live'}}];"
+        "jsCode": "const incoming = $json.body ?? $json;\nconst nestedPayload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {};\nconst normalized = {...nestedPayload, ...incoming};\nnormalized.payload = nestedPayload.payload ?? nestedPayload;\nnormalized.mode = normalized.mode || 'dry_run';\nnormalized.action = normalized.action || 'run_lifecycle';\nnormalized.tool_results = Array.isArray(normalized.tool_results) ? normalized.tool_results : [];\nnormalized.desired_tools = Array.isArray(normalized.desired_tools) ? normalized.desired_tools : null;\ndelete normalized.skipped_tool;\nconst toolName = 'tool_request_analysis';\nconst shouldRun = !normalized.desired_tools || normalized.desired_tools.includes(toolName);\nif (!shouldRun) {\n  const results = [...normalized.tool_results, {tool: toolName, status: 'skipped', reason: 'not selected for action'}];\n  return [{json: {...normalized, tool_results: results, skipped_tool: toolName}}];\n}\nconst llmRequestBodyJson = JSON.stringify({model:(normalized.llm_model || 'gpt-4o-mini'), messages:[{role:'system',content:'Analyse the client request. Return strict JSON with facts, assumptions, missing_information, risk_flags, and source material used.'},{role:'user',content:JSON.stringify(normalized)}], response_format:{type:'json_object'}});\nreturn [{json: {...normalized, current_stage: toolName, live_mode: normalized.mode === 'live', llm_request_body_json: llmRequestBodyJson}}];"
       }
     },
     {
@@ -63,24 +65,38 @@
     {
       "id": "3",
       "name": "Call OpenAI Or LiteLLM",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.1,
       "position": [
         440,
         0
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$json.llm_base_url || \"https://api.openai.com/v1/chat/completions\"}}",
-        "sendBody": true,
-        "jsonBody": "={{ {model:($json.llm_model || \"gpt-4o-mini\"), messages:[{role:'system',content:\"Analyse the client request. Return strict JSON with facts, assumptions, missing_information, risk_flags, and source material used.\"},{role:'user',content:JSON.stringify($json)}], response_format:{type:'json_object'}} }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "httpHeaderAuth"
+        "resource": "chat",
+        "operation": "complete",
+        "chatModel": "={{$json.llm_model || 'gpt-4o-mini'}}",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Analyse the client request. Return strict JSON with facts, assumptions, missing_information, risk_flags, and source material used."
+            },
+            {
+              "role": "user",
+              "content": "={{ JSON.stringify($item(0).$node[\"Normalize And Auth\"].json) }}"
+            }
+          ]
+        },
+        "simplifyOutput": true,
+        "options": {
+          "temperature": 0.2,
+          "timeout": 300000
+        }
       },
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "AI_LLM_HTTP_AUTH",
-          "name": "AI_LLM_HTTP_AUTH"
+        "openAiApi": {
+          "id": "OpenAi account",
+          "name": "OpenAi account"
         }
       }
     },
@@ -94,7 +110,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.fallback_payload || state.request_analysis || {mode: 'dry_run', workflow: state.current_stage, note: 'dry-run fallback output'};\n} else {\n  try {\n    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true};\n  }\n}\nconst outputJson = JSON.stringify(parsed || {});\nconst safeSql = value => String(value ?? '').replace(/'/g, \"''\");\nreturn [{json: {...state, request_analysis: parsed, request_analysis_json: outputJson, request_analysis_json_sql: safeSql(outputJson), raw_model_text: rawText, raw_model_text_sql: safeSql(rawText), parse_warning: parseWarning, warning_message: warningMessage, warning_message_sql: safeSql(warningMessage), current_stage_sql: safeSql(state.current_stage), output_type_sql: safeSql(state.output_type), dispatch_label_sql: safeSql(state.dispatch_label), qa_status: 'pending'}}];"
+        "jsCode": "const state = $node['Normalize And Auth'].json;\nif (state.skipped_tool) {\n  return [{json: state}];\n}\nconst rawText = $json.message?.content ?? $json.choices?.[0]?.message?.content ?? $json.body?.choices?.[0]?.message?.content ?? $json.data?.choices?.[0]?.message?.content ?? '';\nconst cleanedRawText = typeof rawText === 'string' ? rawText.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, '') : rawText;\nlet parsed;\nlet parseWarning = false;\nlet warningMessage = '';\nif (state.mode === 'dry_run' && !rawText) {\n  parsed = state.fallback_payload || state.request_analysis || {mode: 'dry_run', workflow: state.current_stage, note: 'dry-run fallback output'};\n} else {\n  try {\n    parsed = typeof cleanedRawText === 'string' ? JSON.parse(cleanedRawText) : cleanedRawText;\n  } catch (error) {\n    parseWarning = true;\n    warningMessage = error.message;\n    parsed = {raw_text: rawText, parse_warning: true};\n  }\n}\nconst outputJson = JSON.stringify(parsed || {});\nconst outputJsonB64 = Buffer.from(outputJson, 'utf8').toString('base64');\nconst safeSql = value => String(value ?? '').replace(/'/g, \"''\");\nreturn [{json: {...state, request_analysis: parsed, request_analysis_json: outputJson, request_analysis_json_b64: outputJsonB64, request_analysis_json_sql: safeSql(outputJson), raw_model_text: rawText, raw_model_text_sql: safeSql(rawText), parse_warning: parseWarning, warning_message: warningMessage, warning_message_sql: safeSql(warningMessage), current_stage_sql: safeSql(state.current_stage), output_type_sql: safeSql(state.output_type), dispatch_label_sql: safeSql(state.dispatch_label), qa_status: 'pending'}}];"
       }
     },
     {
@@ -108,7 +124,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH warning_insert AS (\n  INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'REQUEST_ANALYSIS_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\n  WHERE COALESCE('{{$json.parse_warning}}','false') = 'true'\n  RETURNING id\n)\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.request_analysis_json_sql}}' AS request_analysis_json_sql;"
+        "query": "WITH warning_insert AS (\n  INSERT INTO content_errors (job_id, severity, error_code, error_message, recoverable, context)\n  SELECT NULLIF('{{$json.job_id}}','')::uuid, 'warning', 'REQUEST_ANALYSIS_PARSE_WARNING', COALESCE(NULLIF('{{$json.warning_message_sql}}',''),'LLM response parse warning'), true, jsonb_build_object('raw_text', LEFT('{{$json.raw_model_text_sql}}', 2000), 'workflow', '{{$json.current_stage_sql}}')\n  WHERE COALESCE('{{$json.parse_warning}}','false') = 'true'\n  RETURNING id\n)\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, '{{$json.request_analysis_json_b64}}' AS request_analysis_json_b64;"
       },
       "credentials": {
         "postgres": {
@@ -128,7 +144,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'request_analysis', 'Request analysis', COALESCE(NULLIF('{{$json.request_analysis_json_sql}}',''),'{}')::jsonb, 'pending');\nUPDATE content_jobs SET status='waiting_for_analysis_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Request analysis approval gate reached',jsonb_build_object('approval_stage','analysis'));\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'waiting_for_analysis_approval' AS status;"
+        "query": "WITH analysis_source AS (\n  SELECT convert_from(decode('{{$json.request_analysis_json_b64}}','base64'),'UTF8')::jsonb AS report\n)\nINSERT INTO content_outputs (job_id, output_type, title, structured_data, qa_status)\nVALUES (NULLIF('{{$json.job_id}}','')::uuid, 'request_analysis', 'Request analysis', (SELECT report FROM analysis_source), 'pending');\nUPDATE content_jobs SET status='waiting_for_analysis_approval', updated_at=now() WHERE id=NULLIF('{{$json.job_id}}','')::uuid;\nINSERT INTO content_events (job_id,event_type,message,metadata) VALUES (NULLIF('{{$json.job_id}}','')::uuid,'approval_gate','Request analysis approval gate reached',jsonb_build_object('approval_stage','analysis'));\nSELECT NULLIF('{{$json.job_id}}','') AS job_id, 'waiting_for_analysis_approval' AS status;"
       },
       "credentials": {
         "postgres": {
