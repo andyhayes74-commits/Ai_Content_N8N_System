@@ -287,7 +287,7 @@ function applyExecuteWorkflowIds(payload, workflowIdMap) {
       continue;
     }
 
-    const workflowId = String(workflowIdMap[workflowRef] || '').trim();
+    const workflowId = getWorkflowId(workflowRef, workflowIdMap);
     if (!workflowId) {
       missing.add(workflowRef);
       continue;
